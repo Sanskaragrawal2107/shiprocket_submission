@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-httpx
-razorpay
-python-dotenv
-openai
-fastmcp[http]
