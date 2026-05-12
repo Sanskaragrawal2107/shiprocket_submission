@@ -10,13 +10,13 @@ const CitationObjectSchema = z.object({
 
 /* ── Schema ────────────────────────────────────────────── */
 export const HealthScoreSchema = z.object({
-  overall_score: z.number().describe("Overall health score 0-100"),
+  overall_score: z.number().optional().default(0).describe("Overall health score 0-100"),
   categories: z.array(z.object({
     name:   z.string().describe("Category name like Revenue, Delivery, Payments, Ads"),
     score:  z.number().describe("Score 0-100"),
     status: z.enum(["healthy", "warning", "critical"]).describe("Status"),
     detail: z.string().optional().describe("Brief detail"),
-  })).describe("Category breakdown"),
+  })).optional().default([]).describe("Category breakdown"),
   merchant_id: z.string().optional().describe("Merchant ID"),
   citations: z.array(CitationObjectSchema).optional()
     .describe("Source citations — each cites the exact table, row_id, field and value this number comes from"),
@@ -36,9 +36,13 @@ function getScoreColor(score) {
 
 /* ── Component ─────────────────────────────────────────── */
 export function HealthScore({ overall_score, categories, merchant_id, citations }) {
-  const scoreColor = getScoreColor(overall_score);
+  // Guard against undefined/null during Tambo streaming — props may arrive before LLM finishes
+  const safeScore = typeof overall_score === "number" ? overall_score : 0;
+  const safeCategories = Array.isArray(categories) ? categories : [];
+
+  const scoreColor = getScoreColor(safeScore);
   const circumference = 2 * Math.PI * 52;
-  const progress = ((100 - overall_score) / 100) * circumference;
+  const progress = ((100 - safeScore) / 100) * circumference;
 
   return (
     <div className="data-card" style={{ minWidth: 340, maxWidth: 480 }}>
@@ -78,19 +82,19 @@ export function HealthScore({ overall_score, categories, merchant_id, citations 
               justifyContent: "center",
             }}>
               <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor, letterSpacing: "-0.03em" }}>
-                {overall_score}
+                {safeScore}
               </span>
               <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 500 }}>/ 100</span>
             </div>
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-              {overall_score >= 75 ? "Looking Good! 🎉" : overall_score >= 50 ? "Needs Attention ⚠️" : "Critical Issues 🚨"}
+              {safeScore >= 75 ? "Looking Good! 🎉" : safeScore >= 50 ? "Needs Attention ⚠️" : "Critical Issues 🚨"}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-              {overall_score >= 75
+              {safeScore >= 75
                 ? "Your business metrics are in good shape."
-                : overall_score >= 50
+                : safeScore >= 50
                   ? "Some areas need improvement."
                   : "Multiple critical issues detected."}
             </div>
@@ -99,7 +103,7 @@ export function HealthScore({ overall_score, categories, merchant_id, citations 
 
         {/* Category Bars */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {categories.map((cat, i) => {
+          {safeCategories.map((cat, i) => {
             const st = STATUS_COLORS[cat.status] || STATUS_COLORS.healthy;
             return (
               <div key={i}>

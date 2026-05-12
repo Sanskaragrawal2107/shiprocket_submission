@@ -73,6 +73,7 @@ def build_data_snapshot(data: dict) -> dict:
         "period": f"Last 7 days ending {date.today().isoformat()}",
         "total_orders": total_orders,
         "total_revenue": round(total_revenue, 2),
+        "avg_order_value": round(total_revenue / total_orders, 2) if total_orders > 0 else 0,
         "total_deliveries": total_deliveries,
         "delivered": delivered,
         "failed_or_returned": failed,

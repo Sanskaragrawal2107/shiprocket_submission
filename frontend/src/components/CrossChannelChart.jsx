@@ -12,14 +12,16 @@ const CitationObjectSchema = z.object({
 }).or(z.string());
 
 /* ── Schema ────────────────────────────────────────────── */
+// All fields are .optional() — Tambo streams props one at a time so they
+// arrive as undefined until the LLM finishes generating.
 export const CrossChannelChartSchema = z.object({
   data: z.array(z.object({
-    date:        z.string().describe("Date label"),
+    date:        z.string().optional().default("").describe("Date label"),
     revenue:     z.number().optional().describe("Revenue amount"),
     ad_spend:    z.number().optional().describe("Ad spend amount"),
     orders:      z.number().optional().describe("Number of orders"),
     deliveries:  z.number().optional().describe("Number of deliveries"),
-  })).describe("Time-series data across channels"),
+  })).optional().default([]).describe("Time-series data across channels"),
   title:   z.string().optional().describe("Chart title"),
   metrics: z.array(z.string()).optional().describe("Which metrics to show"),
   citations: z.array(CitationObjectSchema).optional()
@@ -35,7 +37,9 @@ const METRIC_CONFIG = {
 
 /* ── Component ─────────────────────────────────────────── */
 export function CrossChannelChart({ data, title, metrics, citations }) {
-  const activeMetrics = metrics || Object.keys(METRIC_CONFIG);
+  const safeData    = Array.isArray(data)    ? data    : [];
+  const safeMetrics = Array.isArray(metrics) ? metrics : Object.keys(METRIC_CONFIG);
+  const activeMetrics = safeMetrics.length > 0 ? safeMetrics : Object.keys(METRIC_CONFIG);
 
   return (
     <div className="data-card" style={{ minWidth: 380, maxWidth: 640 }}>
@@ -48,7 +52,7 @@ export function CrossChannelChart({ data, title, metrics, citations }) {
       <div className="data-card-body">
         <div className="chart-container" style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
+            <LineChart data={safeData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} />
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} />

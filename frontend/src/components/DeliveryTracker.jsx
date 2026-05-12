@@ -12,11 +12,13 @@ const CitationObjectSchema = z.object({
 }).or(z.string());
 
 /* ── Schema ────────────────────────────────────────────── */
+// All top-level fields are .optional() with defaults — Tambo streams props one
+// at a time so they arrive as undefined until the LLM finishes generating.
 export const DeliveryTrackerSchema = z.object({
-  delivered:  z.number().describe("Number of delivered shipments"),
-  in_transit: z.number().describe("Number of in-transit shipments"),
-  rto:        z.number().describe("Number of RTO (returned) shipments"),
-  failed:     z.number().describe("Number of failed deliveries"),
+  delivered:  z.number().optional().default(0).describe("Number of delivered shipments"),
+  in_transit: z.number().optional().default(0).describe("Number of in-transit shipments"),
+  rto:        z.number().optional().default(0).describe("Number of RTO (returned) shipments"),
+  failed:     z.number().optional().default(0).describe("Number of failed deliveries"),
   rto_rate:   z.number().optional().describe("RTO rate as percentage"),
   avg_days:   z.number().optional().describe("Average delivery days"),
   citations:  z.array(CitationObjectSchema).optional()
@@ -32,8 +34,16 @@ const SEGMENTS = [
 
 /* ── Component ─────────────────────────────────────────── */
 export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, avg_days, citations }) {
-  const total = delivered + in_transit + rto + failed;
-  const values = { delivered, in_transit, rto, failed };
+  // Guard every numeric prop — they arrive as undefined/null during Tambo streaming
+  const safeDelivered  = typeof delivered  === "number" ? delivered  : 0;
+  const safeInTransit  = typeof in_transit === "number" ? in_transit : 0;
+  const safeRto        = typeof rto        === "number" ? rto        : 0;
+  const safeFailed     = typeof failed     === "number" ? failed     : 0;
+  const safeRtoRate    = typeof rto_rate   === "number" ? rto_rate   : null;
+  const safeAvgDays    = typeof avg_days   === "number" ? avg_days   : null;
+
+  const total = safeDelivered + safeInTransit + safeRto + safeFailed;
+  const values = { delivered: safeDelivered, in_transit: safeInTransit, rto: safeRto, failed: safeFailed };
 
   const pieData = SEGMENTS.map(s => ({
     name: s.label,
@@ -94,21 +104,21 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
           </div>
         </div>
 
-        {(rto_rate !== undefined || avg_days !== undefined) && (
+        {(safeRtoRate !== null || safeAvgDays !== null) && (
           <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
-            {rto_rate !== undefined && (
+            {safeRtoRate !== null && (
               <div className="stat-item">
                 <div className="stat-item-value" style={{
-                  color: rto_rate > 10 ? "var(--accent-rose)" : "var(--accent-emerald)"
+                  color: safeRtoRate > 10 ? "var(--accent-rose)" : "var(--accent-emerald)"
                 }}>
-                  {rto_rate.toFixed(1)}%
+                  {safeRtoRate.toFixed(1)}%
                 </div>
                 <div className="stat-item-label">RTO Rate</div>
               </div>
             )}
-            {avg_days !== undefined && (
+            {safeAvgDays !== null && (
               <div className="stat-item">
-                <div className="stat-item-value">{avg_days.toFixed(1)}</div>
+                <div className="stat-item-value">{safeAvgDays.toFixed(1)}</div>
                 <div className="stat-item-label">Avg Delivery Days</div>
               </div>
             )}

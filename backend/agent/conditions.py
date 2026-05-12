@@ -63,49 +63,37 @@ def check_return_rate(orders: list[dict]) -> dict | None:
 
 
 def check_roas(ads_data: list[dict], orders: list[dict]) -> dict | None:
-    """Check if any campaign ROAS is below 2.5."""
+    """Check if overall ROAS is below 2.5, using actual order revenue / actual ad spend."""
     if not ads_data:
         return None
 
-    # Group by campaign
-    campaigns = {}
-    for ad in ads_data:
-        cid = ad.get("campaign_id", "unknown")
-        if cid not in campaigns:
-            campaigns[cid] = {
-                "name": ad.get("campaign_name", ""),
-                "total_spend": 0,
-                "total_conversions": 0,
-            }
-        campaigns[cid]["total_spend"] += float(ad.get("spend", 0))
-        campaigns[cid]["total_conversions"] += int(ad.get("conversions", 0))
+    total_ad_spend = sum(float(ad.get("spend", 0)) for ad in ads_data)
+    if total_ad_spend <= 0:
+        return None
 
-    # Calculate total revenue from orders for ROAS approximation
+    # Use REAL revenue from orders table — no guessing
     total_revenue = sum(float(o.get("revenue", 0)) for o in orders) if orders else 0
-    total_ad_spend = sum(c["total_spend"] for c in campaigns.values())
 
-    low_roas_campaigns = []
-    for cid, cdata in campaigns.items():
-        if cdata["total_spend"] > 0:
-            # Approximate ROAS per campaign: proportional revenue share
-            share = cdata["total_conversions"] / max(sum(c["total_conversions"] for c in campaigns.values()), 1)
-            estimated_revenue = total_revenue * share if total_revenue > 0 else cdata["total_conversions"] * 500
-            roas = estimated_revenue / cdata["total_spend"]
-            if roas < THRESHOLDS["roas_min"]:
-                low_roas_campaigns.append({
-                    "campaign_id": cid,
-                    "campaign_name": cdata["name"],
-                    "roas": round(roas, 2),
-                    "spend": round(cdata["total_spend"], 2),
-                })
+    if total_revenue <= 0:
+        # No revenue data available — skip ROAS check rather than hallucinate
+        return None
 
-    if low_roas_campaigns:
+    overall_roas = total_revenue / total_ad_spend
+
+    if overall_roas < THRESHOLDS["roas_min"]:
         return {
             "condition": "roas_min",
             "threshold": THRESHOLDS["roas_min"],
-            "actual": low_roas_campaigns[0]["roas"],
-            "message": f"{len(low_roas_campaigns)} campaign(s) below ROAS {THRESHOLDS['roas_min']}",
-            "details": {"campaigns": low_roas_campaigns}
+            "actual": round(overall_roas, 2),
+            "message": (
+                f"Overall ROAS is {overall_roas:.2f} (threshold: {THRESHOLDS['roas_min']}) "
+                f"— ₹{total_revenue:.0f} revenue / ₹{total_ad_spend:.0f} ad spend"
+            ),
+            "details": {
+                "total_ad_spend": round(total_ad_spend, 2),
+                "total_revenue": round(total_revenue, 2),
+                "overall_roas": round(overall_roas, 2),
+            },
         }
     return None
 
@@ -186,7 +174,13 @@ def check_settlement_gap(orders: list[dict], payments: list[dict]) -> dict | Non
         return None
 
     total_order_revenue = sum(float(o.get("revenue", 0)) for o in orders)
-    total_payments = sum(float(p.get("amount", 0)) for p in payments if p.get("status") == "paid")
+    # Accept both 'paid' and 'created' statuses — Razorpay uses 'created' for captured payments
+    settled_statuses = {"paid", "created", "captured", "settled"}
+    total_payments = sum(
+        float(p.get("amount", 0))
+        for p in payments
+        if p.get("status", "").lower() in settled_statuses
+    )
 
     if total_order_revenue > 0:
         gap = (total_order_revenue - total_payments) / total_order_revenue
@@ -195,11 +189,15 @@ def check_settlement_gap(orders: list[dict], payments: list[dict]) -> dict | Non
                 "condition": "settlement_gap",
                 "threshold": THRESHOLDS["settlement_gap"],
                 "actual": round(gap, 3),
-                "message": f"Settlement gap is {gap:.0%}: ₹{total_order_revenue:.0f} ordered vs ₹{total_payments:.0f} settled",
+                "message": (
+                    f"Settlement gap is {gap:.0%}: "
+                    f"₹{total_order_revenue:.0f} ordered vs ₹{total_payments:.0f} settled"
+                ),
                 "details": {
                     "total_order_revenue": round(total_order_revenue, 2),
                     "total_payments_settled": round(total_payments, 2),
-                }
+                    "gap_amount": round(total_order_revenue - total_payments, 2),
+                },
             }
     return None
 

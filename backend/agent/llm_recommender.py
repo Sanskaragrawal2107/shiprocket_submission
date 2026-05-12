@@ -22,8 +22,9 @@ def get_supabase() -> SupabaseClient:
 SYSTEM_PROMPT = """You are an operations analyst for a D2C (Direct-to-Consumer) brand in India.
 You analyze anomalies in shipping, payments, ads, and orders data.
 Give 2-3 SPECIFIC, actionable recommendations with estimated ₹ savings.
-Be specific with numbers — reference the actual data provided.
-Format each recommendation as a clear action item.
+CRITICAL INSTRUCTION: Rely STRICTLY on the actual numbers and metrics provided in the snapshot and anomaly details.
+UNDER NO CIRCUMSTANCES are you allowed to use the words 'assume', 'assuming', 'assumed', or 'assumption' anywhere in your response. 
+Average Order Value (avg_order_value) and other concrete metrics are provided directly in the snapshot. Use them directly to calculate exact impact without phrasing it as an assumption or hypothetical scenario. Format each recommendation as a clear action item.
 At the end, provide a single total estimated monthly saving in ₹."""
 
 
@@ -41,11 +42,11 @@ def build_user_prompt(triggered_conditions: list[dict], data_snapshot: dict) -> 
 Data snapshot (last 7 days):
 {json.dumps(data_snapshot, indent=2)}
 
-Based on these anomalies and data:
-1. Give 2-3 specific, actionable recommendations
-2. For each recommendation, estimate the ₹ saving per month
-3. Be specific — reference actual numbers from the data
-4. End with total estimated monthly saving"""
+Based strictly on these anomalies and data snapshot:
+1. Give 2-3 specific, actionable recommendations.
+2. For each recommendation, estimate the ₹ saving per month using EXACT numbers from the snapshot. Do NOT use any hypothetical or conditional wording like 'assume' or 'assuming'. State the calculation facts directly.
+3. Reference actual numbers from the data explicitly.
+4. End with total estimated monthly saving."""
 
 
 def parse_recommendations(llm_response: str) -> tuple[list[str], float]:

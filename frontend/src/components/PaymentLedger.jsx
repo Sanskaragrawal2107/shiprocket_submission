@@ -9,15 +9,17 @@ const CitationObjectSchema = z.object({
 }).or(z.string());
 
 /* ── Schema ────────────────────────────────────────────── */
+// All fields are .optional() — Tambo streams props one at a time so they
+// arrive as undefined until the LLM finishes generating.
 export const PaymentLedgerSchema = z.object({
   payments: z.array(z.object({
-    id:        z.string().describe("Payment ID"),
-    amount:    z.number().describe("Payment amount in INR"),
-    status:    z.string().describe("Payment status"),
+    id:        z.string().optional().default("").describe("Payment ID"),
+    amount:    z.number().optional().default(0).describe("Payment amount in INR"),
+    status:    z.string().optional().default("pending").describe("Payment status"),
     method:    z.string().optional().describe("Payment method"),
     date:      z.string().optional().describe("Payment date"),
     order_ref: z.string().optional().describe("Linked order reference"),
-  })).describe("List of payments"),
+  })).optional().default([]).describe("List of payments"),
   total_captured: z.number().optional().describe("Total captured amount"),
   total_refunded: z.number().optional().describe("Total refunded amount"),
   success_rate:   z.number().optional().describe("Payment success rate %"),
@@ -35,7 +37,13 @@ const STATUS_STYLES = {
 
 /* ── Component ─────────────────────────────────────────── */
 export function PaymentLedger({ payments, total_captured, total_refunded, success_rate, citations }) {
-  const fmt = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
+  // Guard every prop — they arrive as undefined/null during Tambo streaming
+  const safePayments    = Array.isArray(payments) ? payments : [];
+  const safeSuccessRate = typeof success_rate   === "number" ? success_rate   : null;
+  const safeCaptured    = typeof total_captured  === "number" ? total_captured  : null;
+  const safeRefunded    = typeof total_refunded  === "number" ? total_refunded  : null;
+
+  const fmt = (n) => `₹${Number(n ?? 0).toLocaleString("en-IN")}`;
 
   return (
     <div className="data-card" style={{ minWidth: 340, maxWidth: 620 }}>
@@ -44,34 +52,34 @@ export function PaymentLedger({ payments, total_captured, total_refunded, succes
           <span style={{ fontSize: 16 }}>💳</span>
           Payment Ledger
         </div>
-        <span className="data-card-badge badge-neutral">{payments.length} payments</span>
+        <span className="data-card-badge badge-neutral">{safePayments.length} payments</span>
       </div>
       <div className="data-card-body">
-        {(total_captured !== undefined || total_refunded !== undefined || success_rate !== undefined) && (
+        {(safeCaptured !== null || safeRefunded !== null || safeSuccessRate !== null) && (
           <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", marginBottom: 16 }}>
-            {total_captured !== undefined && (
+            {safeCaptured !== null && (
               <div className="stat-item">
                 <div className="stat-item-value" style={{ color: "var(--accent-emerald)", fontSize: 18 }}>
-                  {fmt(total_captured)}
+                  {fmt(safeCaptured)}
                 </div>
                 <div className="stat-item-label">Captured</div>
               </div>
             )}
-            {total_refunded !== undefined && (
+            {safeRefunded !== null && (
               <div className="stat-item">
                 <div className="stat-item-value" style={{ color: "var(--accent-amber)", fontSize: 18 }}>
-                  {fmt(total_refunded)}
+                  {fmt(safeRefunded)}
                 </div>
                 <div className="stat-item-label">Refunded</div>
               </div>
             )}
-            {success_rate !== undefined && (
+            {safeSuccessRate !== null && (
               <div className="stat-item">
                 <div className="stat-item-value" style={{
-                  color: success_rate > 90 ? "var(--accent-emerald)" : "var(--accent-rose)",
+                  color: safeSuccessRate > 90 ? "var(--accent-emerald)" : "var(--accent-rose)",
                   fontSize: 18,
                 }}>
-                  {success_rate.toFixed(1)}%
+                  {safeSuccessRate.toFixed(1)}%
                 </div>
                 <div className="stat-item-label">Success Rate</div>
               </div>
@@ -91,12 +99,12 @@ export function PaymentLedger({ payments, total_captured, total_refunded, succes
               </tr>
             </thead>
             <tbody>
-              {payments.slice(0, 10).map((p, i) => {
-                const statusKey = p.status?.toLowerCase() || "pending";
+              {safePayments.slice(0, 10).map((p, i) => {
+                const statusKey = (p.status || "pending").toLowerCase();
                 const st = STATUS_STYLES[statusKey] || STATUS_STYLES.pending;
                 return (
                   <tr key={i}>
-                    <td style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{p.id}</td>
+                    <td style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{p.id || "—"}</td>
                     <td style={{ fontWeight: 600 }}>{fmt(p.amount)}</td>
                     <td>
                       <span style={{
@@ -110,7 +118,7 @@ export function PaymentLedger({ payments, total_captured, total_refunded, succes
                         color: st.color,
                         border: `1px solid ${st.border}`,
                       }}>
-                        {p.status}
+                        {p.status || "pending"}
                       </span>
                     </td>
                     <td>{p.method || "—"}</td>
@@ -120,9 +128,9 @@ export function PaymentLedger({ payments, total_captured, total_refunded, succes
               })}
             </tbody>
           </table>
-          {payments.length > 10 && (
+          {safePayments.length > 10 && (
             <div style={{ padding: "8px 16px", fontSize: 11, color: "var(--text-muted)" }}>
-              Showing 10 of {payments.length} payments
+              Showing 10 of {safePayments.length} payments
             </div>
           )}
         </div>

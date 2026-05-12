@@ -13,10 +13,12 @@ const CitationObjectSchema = z.object({
 }).or(z.string());
 
 /* ── Schema ────────────────────────────────────────────── */
+// All required fields are .optional() with defaults — Tambo streams props one
+// at a time so they arrive as undefined until the LLM finishes generating.
 export const RevenueCardSchema = z.object({
-  total_revenue:   z.number().describe("Total revenue in INR"),
-  order_count:     z.number().describe("Number of orders"),
-  avg_order_value: z.number().describe("Average order value in INR"),
+  total_revenue:   z.number().optional().default(0).describe("Total revenue in INR"),
+  order_count:     z.number().optional().default(0).describe("Number of orders"),
+  avg_order_value: z.number().optional().default(0).describe("Average order value in INR"),
   trend: z.array(z.object({
     date:    z.string().describe("Date label"),
     revenue: z.number().describe("Revenue for the day"),
@@ -31,7 +33,14 @@ export const RevenueCardSchema = z.object({
 export function RevenueCard({
   total_revenue, order_count, avg_order_value, trend, period, change_pct, citations
 }) {
-  const isPositive = (change_pct ?? 0) >= 0;
+  // Guard every numeric prop — they arrive as undefined/null during Tambo streaming
+  const safeRevenue   = typeof total_revenue   === "number" ? total_revenue   : 0;
+  const safeOrders    = typeof order_count      === "number" ? order_count      : 0;
+  const safeAvgOrder  = typeof avg_order_value  === "number" ? avg_order_value  : 0;
+  const safeTrend     = Array.isArray(trend) ? trend : [];
+  const safeChangePct = typeof change_pct === "number" ? change_pct : null;
+
+  const isPositive = (safeChangePct ?? 0) >= 0;
   const formatCurrency = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
 
   return (
@@ -52,30 +61,30 @@ export function RevenueCard({
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}>
-            {formatCurrency(total_revenue)}
+            {formatCurrency(safeRevenue)}
           </div>
-          {change_pct !== undefined && (
+          {safeChangePct !== null && (
             <span className={`metric-change ${isPositive ? "up" : "down"}`}>
-              {isPositive ? "↑" : "↓"} {Math.abs(change_pct).toFixed(1)}%
+              {isPositive ? "↑" : "↓"} {Math.abs(safeChangePct).toFixed(1)}%
             </span>
           )}
         </div>
 
         <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
           <div className="stat-item">
-            <div className="stat-item-value">{order_count}</div>
+            <div className="stat-item-value">{safeOrders}</div>
             <div className="stat-item-label">Orders</div>
           </div>
           <div className="stat-item">
-            <div className="stat-item-value">{formatCurrency(avg_order_value)}</div>
+            <div className="stat-item-value">{formatCurrency(safeAvgOrder)}</div>
             <div className="stat-item-label">Avg Order Value</div>
           </div>
         </div>
 
-        {trend && trend.length > 0 && (
+        {safeTrend.length > 0 && (
           <div className="chart-container" style={{ height: 160, marginTop: 16 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trend}>
+              <AreaChart data={safeTrend}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#34d399" stopOpacity={0.3} />

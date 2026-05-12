@@ -12,11 +12,13 @@ const CitationObjectSchema = z.object({
 }).or(z.string());
 
 /* ── Schema ────────────────────────────────────────────── */
+// All fields are .optional() — Tambo streams props one at a time so they
+// arrive as undefined until the LLM finishes generating.
 export const OrdersChartSchema = z.object({
   data: z.array(z.object({
-    label: z.string().describe("Category or date label"),
-    count: z.number().describe("Number of orders"),
-  })).describe("Bar chart data"),
+    label: z.string().optional().default("").describe("Category or date label"),
+    count: z.number().optional().default(0).describe("Number of orders"),
+  })).optional().default([]).describe("Bar chart data"),
   title: z.string().optional().describe("Chart title"),
   total: z.number().optional().describe("Total orders"),
   citations: z.array(CitationObjectSchema).optional()
@@ -27,6 +29,8 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#22d3ee", "#34d399", "#fbbf24"
 
 /* ── Component ─────────────────────────────────────────── */
 export function OrdersChart({ data, title, total, citations }) {
+  const safeData = Array.isArray(data) ? data : [];
+
   return (
     <div className="data-card" style={{ minWidth: 340, maxWidth: 560 }}>
       <div className="data-card-header">
@@ -34,14 +38,14 @@ export function OrdersChart({ data, title, total, citations }) {
           <span style={{ fontSize: 16 }}>📦</span>
           {title || "Orders Breakdown"}
         </div>
-        {total !== undefined && (
+        {total !== undefined && total !== null && (
           <span className="data-card-badge badge-neutral">{total} total</span>
         )}
       </div>
       <div className="data-card-body">
         <div className="chart-container" style={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} barSize={28}>
+            <BarChart data={safeData} barSize={28}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} />
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} />
@@ -54,7 +58,7 @@ export function OrdersChart({ data, title, total, citations }) {
                 }}
               />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {data.map((_, i) => (
+                {safeData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.85} />
                 ))}
               </Bar>
