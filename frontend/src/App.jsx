@@ -3,6 +3,7 @@
  *
  * Features:
  * - Sidebar with branding, navigation, and connection status
+ * - Merchant selector (reads live merchant list from backend)
  * - Chat interface with Tambo generative UI
  * - Welcome screen with suggestion chips
  * - Dynamic component rendering from LLM responses
@@ -19,19 +20,68 @@ import { tamboComponents } from "./tamboComponents";
 import { tamboTools } from "./tamboTools";
 
 const TAMBO_API_KEY = import.meta.env.VITE_TAMBO_API_KEY || "";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+/* ══════════════════════════════════════════════════════════
+   useMerchants — fetches merchant list from Supabase via backend
+   ══════════════════════════════════════════════════════════ */
+function useMerchants() {
+  const [merchants, setMerchants] = useState([]);
+  const [loading, setLoading]    = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/merchants`)
+      .then((r) => (r.ok ? r.json() : { merchants: [] }))
+      .then((d) => setMerchants(d.merchants || []))
+      .catch(() => setMerchants([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { merchants, loading };
+}
+
+/* ══════════════════════════════════════════════════════════
+   MerchantSelector — compact dropdown in the sidebar
+   ══════════════════════════════════════════════════════════ */
+function MerchantSelector({ merchants, selected, onChange, loading }) {
+  return (
+    <div className="merchant-selector">
+      <div className="merchant-selector-label">Merchant</div>
+      {loading ? (
+        <div className="merchant-selector-loading">Loading…</div>
+      ) : (
+        <select
+          className="merchant-selector-select"
+          value={selected}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {merchants.length === 0 && (
+            <option value="merchant_001">merchant_001 (default)</option>
+          )}
+          {merchants.map((m) => (
+            <option key={m.merchant_id} value={m.merchant_id}>
+              {m.name ? `${m.name} (${m.merchant_id})` : m.merchant_id}
+            </option>
+          ))}
+        </select>
+      )}
+      <div className="merchant-selector-id">{selected}</div>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════
    Sidebar Component
    ══════════════════════════════════════════════════════════ */
-function Sidebar({ onSuggestion }) {
+function Sidebar({ onSuggestion, merchantId, merchants, merchantsLoading, onMerchantChange }) {
   const navItems = [
-    { icon: "💬", label: "Chat", active: true },
-    { icon: "📊", label: "Revenue" },
-    { icon: "📦", label: "Orders" },
-    { icon: "🚚", label: "Deliveries" },
-    { icon: "💳", label: "Payments" },
-    { icon: "📈", label: "Ads" },
-    { icon: "🧠", label: "Insights" },
+    { icon: "💬", label: "Chat",       query: null },
+    { icon: "📊", label: "Revenue",    query: "Show me revenue data" },
+    { icon: "📦", label: "Orders",     query: "Show me orders breakdown" },
+    { icon: "🚚", label: "Deliveries", query: "Show delivery status and RTO rate" },
+    { icon: "💳", label: "Payments",   query: "Show payment ledger" },
+    { icon: "📈", label: "Ads",        query: "Show ads performance and ROAS" },
+    { icon: "🧠", label: "Insights",   query: "Show AI insights and anomalies" },
   ];
 
   return (
@@ -47,18 +97,22 @@ function Sidebar({ onSuggestion }) {
         </div>
       </div>
 
+      {/* Merchant Selector */}
+      <MerchantSelector
+        merchants={merchants}
+        selected={merchantId}
+        onChange={onMerchantChange}
+        loading={merchantsLoading}
+      />
+
       {/* Navigation */}
       <div className="sidebar-section">
         <div className="sidebar-section-title">Dashboard</div>
         {navItems.map((item, i) => (
           <div
             key={i}
-            className={`sidebar-nav-item ${item.active ? "active" : ""}`}
-            onClick={() => {
-              if (item.label !== "Chat") {
-                onSuggestion(`Show me ${item.label.toLowerCase()} data`);
-              }
-            }}
+            className={`sidebar-nav-item ${item.label === "Chat" && !item.query ? "active" : ""}`}
+            onClick={() => item.query && onSuggestion(item.query)}
           >
             <span className="sidebar-nav-icon">{item.icon}</span>
             {item.label}
@@ -70,16 +124,14 @@ function Sidebar({ onSuggestion }) {
         </div>
         <div
           className="sidebar-nav-item"
-          onClick={() => onSuggestion("Sync all data for merchant_001")}
+          onClick={() => onSuggestion(`Sync all data for ${merchantId}`)}
         >
           <span className="sidebar-nav-icon">🔄</span>
           Sync Data
         </div>
         <div
           className="sidebar-nav-item"
-          onClick={() =>
-            onSuggestion("Run agent analysis for merchant_001")
-          }
+          onClick={() => onSuggestion(`Run agent analysis for ${merchantId}`)}
         >
           <span className="sidebar-nav-icon">🤖</span>
           Run Agent
@@ -100,7 +152,7 @@ function Sidebar({ onSuggestion }) {
 /* ══════════════════════════════════════════════════════════
    Welcome Screen
    ══════════════════════════════════════════════════════════ */
-function WelcomeScreen({ onSuggestion }) {
+function WelcomeScreen({ onSuggestion, merchantId }) {
   const suggestions = [
     "What's my revenue this week?",
     "Show delivery RTO rate",
@@ -115,9 +167,9 @@ function WelcomeScreen({ onSuggestion }) {
       <div className="welcome-icon">⚡</div>
       <h1 className="welcome-title">D2C AI Employee</h1>
       <p className="welcome-subtitle">
-        Your AI-powered business intelligence assistant. Ask anything about your
-        Shopify orders, Shiprocket deliveries, Razorpay payments, or Meta Ads —
-        with every number cited back to its source.
+        Analysing data for <strong style={{ color: "var(--accent-cyan)" }}>{merchantId}</strong>.
+        Ask anything about your Shopify orders, Shiprocket deliveries, Razorpay
+        payments, or Meta Ads — with every number cited back to its source row.
       </p>
       <div className="welcome-suggestions">
         {suggestions.map((s, i) => (
@@ -137,12 +189,11 @@ function WelcomeScreen({ onSuggestion }) {
 /* ══════════════════════════════════════════════════════════
    Chat Interface (inside TamboProvider)
    ══════════════════════════════════════════════════════════ */
-function ChatInterface() {
+function ChatInterface({ merchantId, merchants, merchantsLoading, onMerchantChange }) {
   const {
     messages,
     isStreaming,
     isWaiting,
-    isIdle,
     currentThreadId,
     startNewThread,
   } = useTambo();
@@ -150,39 +201,32 @@ function ChatInterface() {
   const { value, setValue, submit, isPending } = useTamboThreadInput();
 
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
-  const [pendingSuggestion, setPendingSuggestion] = useState(null);
+  const textareaRef    = useRef(null);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Handle suggestion from sidebar/welcome
+  // Handle suggestion from sidebar/welcome — inject merchant ID
   useEffect(() => {
     const handler = (e) => {
-      setValue(e.detail);
-      // Auto-submit after a tick
+      // Replace any "for merchant_XXX" pattern with the live selected merchant
+      let text = e.detail || "";
+      text = text.replace(/for merchant_\w+/gi, `for ${merchantId}`);
+      setValue(text);
       setTimeout(async () => {
-        try {
-          await submit();
-        } catch (err) {
-          console.error("Submit error:", err);
-        }
+        try { await submit(); } catch (err) { console.error("Submit error:", err); }
       }, 100);
     };
     window.addEventListener("tambo-suggestion", handler);
     return () => window.removeEventListener("tambo-suggestion", handler);
-  }, [setValue, submit]);
+  }, [setValue, submit, merchantId]);
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!value.trim() || isPending) return;
-    try {
-      await submit();
-    } catch (err) {
-      console.error("Submit error:", err);
-    }
+    try { await submit(); } catch (err) { console.error("Submit error:", err); }
   };
 
   const handleKeyDown = (e) => {
@@ -193,16 +237,20 @@ function ChatInterface() {
   };
 
   const fireSuggestion = (text) => {
-    window.dispatchEvent(
-      new CustomEvent("tambo-suggestion", { detail: text })
-    );
+    window.dispatchEvent(new CustomEvent("tambo-suggestion", { detail: text }));
   };
 
   const hasMessages = messages && messages.length > 0;
 
   return (
     <div className="app-container">
-      <Sidebar onSuggestion={fireSuggestion} />
+      <Sidebar
+        onSuggestion={fireSuggestion}
+        merchantId={merchantId}
+        merchants={merchants}
+        merchantsLoading={merchantsLoading}
+        onMerchantChange={onMerchantChange}
+      />
 
       <main className="main-content">
         {/* Header */}
@@ -211,6 +259,9 @@ function ChatInterface() {
             {currentThreadId ? "Conversation" : "New Chat"}
           </span>
           <div className="main-header-actions">
+            <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 8 }}>
+              📍 {merchantId}
+            </span>
             <button className="btn btn-ghost btn-sm" onClick={startNewThread}>
               + New Chat
             </button>
@@ -220,7 +271,7 @@ function ChatInterface() {
         {/* Chat Area */}
         <div className="chat-area">
           {!hasMessages ? (
-            <WelcomeScreen onSuggestion={fireSuggestion} />
+            <WelcomeScreen onSuggestion={fireSuggestion} merchantId={merchantId} />
           ) : (
             <div className="chat-messages">
               {messages.map((msg) => (
@@ -261,8 +312,7 @@ function ChatInterface() {
                             className="tool-call-indicator"
                           >
                             <div className="spinner"></div>
-                            {block.statusMessage ||
-                              `Running ${block.name}...`}
+                            {block.statusMessage || `Running ${block.name}…`}
                           </div>
                         );
                       }
@@ -308,7 +358,7 @@ function ChatInterface() {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about revenue, orders, deliveries, payments, or ads..."
+                placeholder={`Ask about ${merchantId}'s revenue, orders, deliveries, payments, or ads…`}
                 disabled={isPending || isStreaming}
                 rows={1}
               />
@@ -318,14 +368,9 @@ function ChatInterface() {
                 disabled={!value.trim() || isPending || isStreaming}
               >
                 <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  width="18" height="18" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                 >
                   <line x1="22" y1="2" x2="11" y2="13" />
                   <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -333,8 +378,7 @@ function ChatInterface() {
               </button>
             </div>
             <div className="chat-input-hint">
-              Press Enter to send · Shift+Enter for new line · Powered by Tambo
-              AI
+              Press Enter to send · Shift+Enter for new line · Powered by Tambo AI
             </div>
           </form>
         </div>
@@ -344,45 +388,69 @@ function ChatInterface() {
 }
 
 /* ══════════════════════════════════════════════════════════
-   App Root — wraps everything in TamboProvider
+   App Root — manages merchantId state, wraps in TamboProvider
    ══════════════════════════════════════════════════════════ */
 export default function App() {
+  const { merchants, loading: merchantsLoading } = useMerchants();
+  const [merchantId, setMerchantId] = useState("merchant_001");
+
+  // Once merchants load, default to the first one
+  useEffect(() => {
+    if (merchants.length > 0 && merchantId === "merchant_001") {
+      setMerchantId(merchants[0].merchant_id);
+    }
+  }, [merchants]);
+
+  // Build dynamic context helpers that always reflect current merchantId
+  const contextHelpers = {
+    systemBehavior: () => ({
+      key: "systemBehavior",
+      value: `You are the D2C AI Employee — a proactive business intelligence assistant for D2C brands.
+
+CURRENT MERCHANT: ${merchantId}
+BACKEND: ${API_BASE}
+
+CRITICAL RULES (always follow):
+1. NEVER ask the user for merchant ID or date range.
+   ALWAYS use the current merchant "${merchantId}" and last 7 days as defaults.
+2. ALWAYS render a UI component immediately in response to any business query.
+   Do not respond with only text when a component exists for that topic.
+3. Revenue/sales query            → render RevenueCard immediately.
+4. Orders query                   → render OrdersChart immediately.
+5. Deliveries/shipping/RTO query  → render DeliveryTracker immediately.
+6. Payments/transactions/refunds  → render PaymentLedger immediately.
+7. Ads/ROAS/campaigns query       → render AdsDashboard immediately.
+8. Insights/alerts/anomalies      → render InsightsList immediately.
+9. Cross-channel/trends query     → render CrossChannelChart immediately.
+10. Health/overview/dashboard     → render HealthScore immediately.
+11. Sync request → call syncMerchant tool with merchant_id="${merchantId}", then confirm.
+12. Analysis/agent request → call runAgent tool with merchant_id="${merchantId}".
+13. Populate components with realistic data if live data isn't available yet.
+14. Be concise — one short sentence max before rendering the component.
+15. Every cited number must reference its source table and row ID in the citations array.`,
+    }),
+    merchantContext: () => ({
+      key: "merchantContext",
+      value: `Active merchant: ${merchantId}. Backend API: ${API_BASE}.`,
+    }),
+  };
+
   return (
     <TamboProvider
       apiKey={TAMBO_API_KEY}
-      userKey="d2c-user-local"
+      userKey={`d2c-${merchantId}`}
       components={tamboComponents}
       tools={tamboTools}
       autoGenerateThreadName={true}
       autoGenerateNameThreshold={2}
-      contextHelpers={{
-        systemBehavior: () => ({
-          key: "systemBehavior",
-          value: `You are the D2C AI Employee — a proactive business intelligence assistant for D2C brands.
-
-CRITICAL RULES (always follow):
-1. NEVER ask the user for merchant ID or date range. ALWAYS default to merchant_001 and last 7 days.
-2. ALWAYS render a UI component immediately in response to any business query. Do not respond with only text when a component exists for that topic.
-3. When user asks about revenue/sales → render RevenueCard immediately.
-4. When user asks about orders → render OrdersChart immediately.
-5. When user asks about deliveries/shipping/RTO → render DeliveryTracker immediately.
-6. When user asks about payments/transactions/refunds → render PaymentLedger immediately.
-7. When user asks about ads/ROAS/campaigns → render AdsDashboard immediately.
-8. When user asks about insights/alerts/anomalies → render InsightsList immediately.
-9. When user asks for cross-channel or trends → render CrossChannelChart immediately.
-10. When user asks about health/overview/dashboard → render HealthScore immediately.
-11. If sync is requested → call syncMerchant tool with merchant_001, then confirm success.
-12. If analysis/agent is requested → call runAgent tool with merchant_001.
-13. Populate components with realistic demo data if live data isn't available yet.
-14. Be concise. One short sentence max before rendering the component.`,
-        }),
-        merchantContext: () => ({
-          key: "merchantContext",
-          value: "Default merchant: merchant_001. Backend: http://localhost:8000.",
-        }),
-      }}
+      contextHelpers={contextHelpers}
     >
-      <ChatInterface />
+      <ChatInterface
+        merchantId={merchantId}
+        merchants={merchants}
+        merchantsLoading={merchantsLoading}
+        onMerchantChange={setMerchantId}
+      />
     </TamboProvider>
   );
 }

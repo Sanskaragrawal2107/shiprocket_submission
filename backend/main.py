@@ -59,6 +59,20 @@ def get_supabase():
 # ─── ROUTES ────────────────────────────────────────────────
 
 
+@app.get("/merchants")
+async def list_merchants():
+    """Return all merchants stored in the database."""
+    try:
+        supabase = get_supabase()
+        result = supabase.table("merchants").select("merchant_id, name, created_at").order("created_at").execute()
+        return {
+            "merchants": result.data or [],
+            "count": len(result.data or []),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching merchants: {str(e)}")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""

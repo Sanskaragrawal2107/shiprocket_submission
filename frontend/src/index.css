@@ -178,6 +178,63 @@ body {
   border: 1px solid rgba(34, 211, 238, 0.2);
 }
 
+
+/* ── Merchant Selector ──────────────────────────────────── */
+.merchant-selector {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-default);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.merchant-selector-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.merchant-selector-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--duration) var(--ease-out),
+              box-shadow var(--duration) var(--ease-out);
+  appearance: auto;
+}
+
+.merchant-selector-select:focus,
+.merchant-selector-select:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+}
+
+.merchant-selector-loading {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.merchant-selector-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-cyan);
+  margin-top: 4px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-section {
   padding: 16px 12px;
   flex: 1;
