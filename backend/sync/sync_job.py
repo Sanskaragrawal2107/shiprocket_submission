@@ -40,7 +40,7 @@ def _upsert_batch(supabase: SupabaseClient, table: str, rows: list[dict], batch_
             supabase.table(table).upsert(
                 batch,
                 on_conflict="source_row_ref"
-            ).execute()
+            )
             total += len(batch)
         except Exception as e:
             print(f"  [Upsert] Error in batch {i // batch_size} for {table}: {e}")

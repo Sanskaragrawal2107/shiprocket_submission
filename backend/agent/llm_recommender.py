@@ -109,7 +109,7 @@ async def generate_recommendations(
             "status": "pending_review",
         }
         supabase = get_supabase()
-        supabase.table("agent_insights").insert(insight).execute()
+        supabase.table("agent_insights").insert(insight)
         return insight
 
     try:
@@ -142,7 +142,7 @@ async def generate_recommendations(
         }
 
         supabase = get_supabase()
-        supabase.table("agent_insights").insert(insight).execute()
+        supabase.table("agent_insights").insert(insight)
 
         print(f"[Agent] Saved insights for {merchant_id}: {len(recommendations)} recommendations, est. saving ₹{estimated_saving}")
         return insight
@@ -161,5 +161,5 @@ async def generate_recommendations(
             "status": "error",
         }
         supabase = get_supabase()
-        supabase.table("agent_insights").insert(insight).execute()
+        supabase.table("agent_insights").insert(insight)
         return insight
