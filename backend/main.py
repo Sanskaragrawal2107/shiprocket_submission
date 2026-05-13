@@ -75,12 +75,14 @@ app = FastAPI(
     version="2.0.0",
 )
 
+# CORS — allow all origins because:
+# 1. We use JWT Bearer tokens (not cookies), so allow_credentials=False is correct.
+# 2. allow_origins=["*"] with allow_credentials=False is safe and covers every
+#    deployment URL: localhost dev ports (5173, 5174, 3000…), Netlify, Vercel, etc.
+# 3. No merchant secrets are ever returned in GET responses.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

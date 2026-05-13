@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext";
 import Dashboard from "./Dashboard";
+import App from "./App";
 import LoginPage from "./LoginPage";
 import RegisterPage from "./RegisterPage";
 
@@ -80,6 +81,15 @@ export default function Root() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          {/* /chat opens the dedicated full-screen chatbot */}
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <App />
               </ProtectedRoute>
             }
           />
