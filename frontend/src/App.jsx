@@ -283,7 +283,11 @@ function ChatInterface({ merchantId, userEmail }) {
   };
 
   const hasMessages = messages && messages.length > 0;
-  const historyThreads = threadListData?.threads || [];
+  
+  // Extract threads from infinite query pages
+  const historyThreads = threadListData?.pages 
+    ? threadListData.pages.flatMap(p => p.threads ?? []) 
+    : (threadListData?.threads ?? []);
 
   const handleSelectThread = (threadId) => {
     switchThread(threadId);
@@ -448,9 +452,21 @@ function ChatInterface({ merchantId, userEmail }) {
    App Root — manages merchantId state, wraps in TamboProvider
    ══════════════════════════════════════════════════════════ */
 export default function App() {
-  const { merchant, user, loading: authLoading } = useAuth();
+  const { merchant, user, loading: authLoading, authFetch } = useAuth();
   const merchantId = merchant?.merchant_id || "";
   const userEmail = user?.email || merchant?.email || "";
+  const [kpis, setKpis] = useState(null);
+
+  useEffect(() => {
+    if (!merchantId) return;
+    authFetch(`/agent/insights/${merchantId}`)
+      .then(data => {
+        const rows = Array.isArray(data?.insights) ? data.insights : [];
+        const latest = rows.find(r => r.data_snapshot);
+        if (latest?.data_snapshot) setKpis(latest.data_snapshot);
+      })
+      .catch(console.error);
+  }, [merchantId, authFetch]);
 
   if (authLoading || !merchantId) {
     return (
@@ -494,7 +510,9 @@ CRITICAL RULES (always follow):
     }),
     merchantContext: () => ({
       key: "merchantContext",
-      value: `Active merchant: ${merchantId}. Backend API: ${API_BASE}.`,
+      value: `Active merchant: ${merchantId}. Backend API: ${API_BASE}.
+LIVE KPI DATA FOR THIS MERCHANT (use this exact data to populate components if possible):
+${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
     }),
   };
 

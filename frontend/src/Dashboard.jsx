@@ -14,6 +14,7 @@ import {
   TamboProvider,
   useTambo,
   useTamboThreadInput,
+  useTamboThreadList,
   ComponentRenderer,
 } from "@tambo-ai/react";
 import ReactMarkdown from "react-markdown";
@@ -271,12 +272,83 @@ function SyncBar({ lastSyncedAt, merchantId, authFetch, onSynced }) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   Thread History Sidebar
+   ══════════════════════════════════════════════════════════ */
+function ThreadHistorySidebar({ onClose, merchantId }) {
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useTamboThreadList({ userKey: `d2c-${merchantId}`, limit: 30 });
+  const { currentThreadId, switchThread, startNewThread } = useTambo();
+
+  // Flatten pages (useTamboThreadList returns infinite query pages)
+  const threads = data?.pages
+    ? data.pages.flatMap((p) => p.threads ?? [])
+    : (data?.threads ?? []);
+
+  return (
+    <div className="chat-history-sidebar">
+      <div className="chat-history-header">
+        <span className="chat-history-title">💬 History</span>
+        <button className="chat-panel-icon-btn" onClick={onClose} title="Close">✕</button>
+      </div>
+
+      <button
+        className="chat-history-new-btn"
+        onClick={() => startNewThread()}
+      >
+        + New Chat
+      </button>
+
+      <div className="chat-history-list">
+        {isLoading ? (
+          <div className="chat-history-loading">
+            <div className="loading-dots"><span /><span /><span /></div>
+          </div>
+        ) : threads.length === 0 ? (
+          <div className="chat-history-empty">No conversations yet</div>
+        ) : (
+          threads.map((thread) => (
+            <button
+              key={thread.id}
+              className={`chat-history-item ${thread.id === currentThreadId ? "active" : ""}`}
+              onClick={() => { switchThread(thread.id); onClose(); }}
+            >
+              <span className="chat-history-item-name">
+                {thread.name || "Untitled conversation"}
+              </span>
+              <span className="chat-history-item-date">
+                {new Date(thread.updatedAt ?? thread.createdAt).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </button>
+          ))
+        )}
+
+        {hasNextPage && (
+          <button
+            className="chat-history-load-more"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    Floating Chat Panel (Tambo)
    ══════════════════════════════════════════════════════════ */
 function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
   const { messages, isStreaming, isWaiting, startNewThread } = useTambo();
   const { value, setValue, submit, isPending } = useTamboThreadInput();
   const messagesEndRef = useRef(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -295,111 +367,129 @@ function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
 
   return (
     <div className={`chat-panel ${fullscreen ? "chat-panel-fullscreen" : ""}`}>
-      <div className="chat-panel-header">
-        <div className="chat-panel-title">
-          <span>⚡</span> AI Employee
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="chat-panel-icon-btn" onClick={startNewThread} title="New chat">✦</button>
-          <button
-            className="chat-panel-icon-btn"
-            onClick={onToggleFullscreen}
-            title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {fullscreen ? "⤡" : "⤢"}
-          </button>
-          <button className="chat-panel-icon-btn" onClick={onClose} title="Close">✕</button>
-        </div>
-      </div>
+      {/* History sidebar slides in from the left */}
+      {showHistory && (
+        <ThreadHistorySidebar merchantId={merchantId} onClose={() => setShowHistory(false)} />
+      )}
 
-      <div className="chat-panel-messages">
-        {visibleMessages.length === 0 ? (
-          <div className="chat-panel-welcome">
-            <div style={{ fontSize: 32, marginBottom: 8 }}>⚡</div>
-            <div style={{ fontWeight: 900, marginBottom: 4 }}>Ask me anything</div>
-            <div style={{ fontSize: 12, opacity: 0.65 }}>
-              Revenue · Orders · Deliveries · Payments · Ads
-            </div>
+      <div className="chat-panel-main">
+        <div className="chat-panel-header">
+          <div className="chat-panel-title">
+            <button
+              className="chat-panel-icon-btn"
+              onClick={() => setShowHistory((v) => !v)}
+              title="Chat history"
+              style={{ marginRight: 6 }}
+            >
+              ☰
+            </button>
+            <span>⚡</span> AI Employee
           </div>
-        ) : (
-          visibleMessages.map((msg) => {
-            const content = msg.content;
-            return (
-              <div key={msg.id}>
-                {Array.isArray(content)
-                  ? content.map((block, idx) => {
-                      if (block.type === "text" && block.text) {
-                        return (
-                          <div
-                            key={`${msg.id}-t${idx}`}
-                            className={`chat-panel-bubble ${msg.role}`}
-                          >
-                            <div className="chat-panel-role">
-                              {msg.role === "user" ? "You" : "AI Employee"}
-                            </div>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {block.text}
-                            </ReactMarkdown>
-                          </div>
-                        );
-                      }
-                      if (block.type === "component") {
-                        return (
-                          <div key={block.id || `${msg.id}-c${idx}`} style={{ padding: "8px 0" }}>
-                            <ComponentRenderer
-                              content={block}
-                              threadId={msg.threadId}
-                              messageId={msg.id}
-                            />
-                          </div>
-                        );
-                      }
-                      return null;
-                    })
-                  : (
-                    <div className={`chat-panel-bubble ${msg.role}`}>
-                      <div className="chat-panel-role">
-                        {msg.role === "user" ? "You" : "AI Employee"}
-                      </div>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {String(content || "")}
-                      </ReactMarkdown>
-                    </div>
-                  )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="chat-panel-icon-btn" onClick={() => startNewThread()} title="New chat">✦</button>
+            <button
+              className="chat-panel-icon-btn"
+              onClick={onToggleFullscreen}
+              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {fullscreen ? "⤡" : "⤢"}
+            </button>
+            <button className="chat-panel-icon-btn" onClick={onClose} title="Close">✕</button>
+          </div>
+        </div>
+
+        <div className="chat-panel-messages">
+          {visibleMessages.length === 0 ? (
+            <div className="chat-panel-welcome">
+              <div style={{ fontSize: 32, marginBottom: 8 }}>⚡</div>
+              <div style={{ fontWeight: 900, marginBottom: 4 }}>Ask me anything</div>
+              <div style={{ fontSize: 12, opacity: 0.65 }}>
+                Revenue · Orders · Deliveries · Payments · Ads
               </div>
-            );
-          })
-        )}
-
-        {(isStreaming || isWaiting) && (
-          <div className="chat-panel-bubble assistant">
-            <div className="chat-panel-role">AI Employee</div>
-            <div className="loading-dots">
-              <span /><span /><span />
+              <div style={{ fontSize: 11, opacity: 0.45, marginTop: 8 }}>
+                Tap ☰ to browse your conversation history
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            visibleMessages.map((msg) => {
+              const content = msg.content;
+              return (
+                <div key={msg.id}>
+                  {Array.isArray(content)
+                    ? content.map((block, idx) => {
+                        if (block.type === "text" && block.text) {
+                          return (
+                            <div
+                              key={`${msg.id}-t${idx}`}
+                              className={`chat-panel-bubble ${msg.role}`}
+                            >
+                              <div className="chat-panel-role">
+                                {msg.role === "user" ? "You" : "AI Employee"}
+                              </div>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {block.text}
+                              </ReactMarkdown>
+                            </div>
+                          );
+                        }
+                        if (block.type === "component") {
+                          return (
+                            <div key={block.id || `${msg.id}-c${idx}`} style={{ padding: "8px 0" }}>
+                              <ComponentRenderer
+                                content={block}
+                                threadId={msg.threadId}
+                                messageId={msg.id}
+                              />
+                            </div>
+                          );
+                        }
+                        return null;
+                      })
+                    : (
+                      <div className={`chat-panel-bubble ${msg.role}`}>
+                        <div className="chat-panel-role">
+                          {msg.role === "user" ? "You" : "AI Employee"}
+                        </div>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {String(content || "")}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                </div>
+              );
+            })
+          )}
 
-        <div ref={messagesEndRef} />
-      </div>
+          {(isStreaming || isWaiting) && (
+            <div className="chat-panel-bubble assistant">
+              <div className="chat-panel-role">AI Employee</div>
+              <div className="loading-dots">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
 
-      <div className="chat-panel-input-wrap">
-        <textarea
-          className="chat-panel-input"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask about revenue, RTO, ROAS…"
-          rows={1}
-          disabled={isPending || isStreaming}
-        />
-        <button
-          className="chat-panel-send"
-          disabled={!value.trim() || isPending || isStreaming}
-          onClick={() => submit()}
-        >
-          ↑
-        </button>
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="chat-panel-input-wrap">
+          <textarea
+            className="chat-panel-input"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about revenue, RTO, ROAS…"
+            rows={1}
+            disabled={isPending || isStreaming}
+          />
+          <button
+            className="chat-panel-send"
+            disabled={!value.trim() || isPending || isStreaming}
+            onClick={() => submit()}
+          >
+            ↑
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -408,6 +498,7 @@ function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
 /* ══════════════════════════════════════════════════════════
    Dashboard Inner (uses auth context)
    ══════════════════════════════════════════════════════════ */
+
 function DashboardInner() {
   const { merchant, logout, authFetch } = useAuth();
   const merchantId = merchant?.merchant_id || "";
@@ -620,7 +711,9 @@ CRITICAL RULES:
     }),
     merchantContext: () => ({
       key: "merchantContext",
-      value: `Active merchant: ${merchantId}. Backend: ${API_BASE}.`,
+      value: `Active merchant: ${merchantId}. Backend: ${API_BASE}.
+LIVE KPI DATA FOR THIS MERCHANT (use this exact data to populate components if possible):
+${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
     }),
   };
 
