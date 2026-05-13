@@ -7,6 +7,25 @@ create extension if not exists pgcrypto;
 -- Merchants
 -- -----------------------------------------------------------------------------
 
+create table if not exists public.merchants (
+  merchant_id text primary key,
+  name text not null,
+  email text,
+  password_hash text,
+  shopify_store_url text,
+  shopify_access_token text,
+  razorpay_key_id text,
+  razorpay_key_secret text,
+  shiprocket_email text,
+  shiprocket_password text,
+  meta_ads_account_id text,
+  meta_ads_access_token text,
+  is_active boolean default true,
+  last_synced_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table if exists public.merchants
   add column if not exists email text,
   add column if not exists password_hash text,
