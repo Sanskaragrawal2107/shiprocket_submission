@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   TamboProvider,
   useTambo,
@@ -344,7 +345,8 @@ function ThreadHistorySidebar({ onClose, merchantId }) {
 /* ══════════════════════════════════════════════════════════
    Floating Chat Panel (Tambo)
    ══════════════════════════════════════════════════════════ */
-function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
+function ChatPanel({ merchantId, onClose }) {
+  const navigate = useNavigate();
   const { messages, isStreaming, isWaiting, startNewThread } = useTambo();
   const { value, setValue, submit, isPending } = useTamboThreadInput();
   const messagesEndRef = useRef(null);
@@ -366,7 +368,7 @@ function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
   };
 
   return (
-    <div className={`chat-panel ${fullscreen ? "chat-panel-fullscreen" : ""}`}>
+    <div className="chat-panel">
       {/* History sidebar slides in from the left */}
       {showHistory && (
         <ThreadHistorySidebar merchantId={merchantId} onClose={() => setShowHistory(false)} />
@@ -389,10 +391,10 @@ function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
             <button className="chat-panel-icon-btn" onClick={() => startNewThread()} title="New chat">✦</button>
             <button
               className="chat-panel-icon-btn"
-              onClick={onToggleFullscreen}
-              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              onClick={() => navigate("/chat")}
+              title="Open full-screen chat"
             >
-              {fullscreen ? "⤡" : "⤢"}
+              ⤢
             </button>
             <button className="chat-panel-icon-btn" onClick={onClose} title="Close">✕</button>
           </div>
@@ -511,7 +513,6 @@ function DashboardInner() {
   const [notifications, setNotifications] = useState([]);
   const [lastSyncedAt, setLastSyncedAt] = useState(merchant?.last_synced_at || null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatFullscreen, setChatFullscreen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
 
   /* Derived */
@@ -854,7 +855,7 @@ ${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
 
       {/* ── FLOATING CHAT BUTTON ── */}
       {!chatOpen && (
-        <button className="fab-chat-btn" onClick={() => { setChatOpen(true); setChatFullscreen(false); }}>
+        <button className="fab-chat-btn" onClick={() => { setChatOpen(true); }}>
           <span className="fab-chat-icon">⚡</span>
           <span>Chat with AI</span>
         </button>
@@ -873,9 +874,7 @@ ${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
         >
           <ChatPanel
             merchantId={merchantId}
-            onClose={() => { setChatOpen(false); setChatFullscreen(false); }}
-            fullscreen={chatFullscreen}
-            onToggleFullscreen={() => setChatFullscreen((v) => !v)}
+            onClose={() => { setChatOpen(false); }}
           />
         </TamboProvider>
       )}

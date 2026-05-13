@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useNavigate } from "react-router-dom";
 import {
   TamboProvider,
   useTambo,
@@ -328,6 +329,9 @@ function ChatInterface({ merchantId, userEmail }) {
             <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 8 }}>
               📍 {merchantId}
             </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate("/dashboard")}>
+              ← Dashboard
+            </button>
             <button className="btn btn-ghost btn-sm" onClick={startNewThread}>
               + New Chat
             </button>
@@ -453,6 +457,7 @@ function ChatInterface({ merchantId, userEmail }) {
    ══════════════════════════════════════════════════════════ */
 export default function App() {
   const { merchant, user, loading: authLoading, authFetch } = useAuth();
+  const navigate = useNavigate();
   const merchantId = merchant?.merchant_id || "";
   const userEmail = user?.email || merchant?.email || "";
   const [kpis, setKpis] = useState(null);

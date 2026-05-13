@@ -9,16 +9,37 @@ import hashlib
 from cryptography.fernet import Fernet, InvalidToken
 
 
+def _is_fernet_key(value: str) -> bool:
+    try:
+        Fernet(value.encode("utf-8"))
+    except Exception:
+        return False
+    return True
+
+
+def _derive_key(secret: str) -> bytes:
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
 def _get_key() -> bytes:
+    for candidate in (
+        os.getenv("ENCRYPTION_KEY", "").strip(),
+        os.getenv("API_KEY", "").strip(),
+        os.getenv("INTERNAL_API_KEY", "").strip(),
+    ):
+        if candidate and _is_fernet_key(candidate):
+            return candidate.encode("utf-8")
+
+    fallback_secret = os.getenv("API_KEY", "").strip() or os.getenv("INTERNAL_API_KEY", "").strip()
+    if fallback_secret:
+        return _derive_key(fallback_secret)
+
     key = os.getenv("ENCRYPTION_KEY", "").strip()
-    if not key:
-        fallback_secret = os.getenv("API_KEY", "").strip() or os.getenv("INTERNAL_API_KEY", "").strip()
-        if fallback_secret:
-            digest = hashlib.sha256(fallback_secret.encode("utf-8")).digest()
-            return base64.urlsafe_b64encode(digest)
-    if not key:
-        raise RuntimeError("ENCRYPTION_KEY is not configured")
-    return key.encode("utf-8")
+    if key:
+        return _derive_key(key)
+
+    raise RuntimeError("ENCRYPTION_KEY is not configured")
 
 
 def get_fernet() -> Fernet:
