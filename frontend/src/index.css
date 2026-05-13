@@ -2787,6 +2787,60 @@ select {
   cursor: not-allowed;
 }
 
+/* ── Fullscreen chat panel ── */
+.chat-panel-fullscreen {
+  /* Override the fixed positioning to cover the full viewport */
+  position: fixed;
+  inset: 0;
+  bottom: 0;
+  right: 0;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-top: 4px solid #000;
+  box-shadow: none;
+  border-radius: 0;
+  animation: panelSlideIn 0.2s var(--ease-elastic);
+  z-index: 400;
+}
+
+/* Wider bubbles in fullscreen */
+.chat-panel-fullscreen .chat-panel-bubble {
+  max-width: 70%;
+  font-size: 14px;
+  padding: 14px 20px;
+}
+
+/* Wider input in fullscreen */
+.chat-panel-fullscreen .chat-panel-input-wrap {
+  padding: 16px 24px;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.chat-panel-fullscreen .chat-panel-messages {
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 24px 24px;
+}
+
+/* Make the input-wrap row full-width in fullscreen */
+.chat-panel-fullscreen > .chat-panel-input-wrap {
+  max-width: 100%;
+  padding: 16px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.chat-panel-fullscreen .chat-panel-input {
+  font-size: 15px;
+  padding: 12px 16px;
+}
+
+
 /* ── Loading dots (reused) ── */
 .loading-dots {
   display: flex;

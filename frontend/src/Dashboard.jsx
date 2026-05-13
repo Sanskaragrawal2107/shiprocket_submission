@@ -273,7 +273,7 @@ function SyncBar({ lastSyncedAt, merchantId, authFetch, onSynced }) {
 /* ══════════════════════════════════════════════════════════
    Floating Chat Panel (Tambo)
    ══════════════════════════════════════════════════════════ */
-function ChatPanel({ merchantId, onClose }) {
+function ChatPanel({ merchantId, onClose, fullscreen, onToggleFullscreen }) {
   const { messages, isStreaming, isWaiting, startNewThread } = useTambo();
   const { value, setValue, submit, isPending } = useTamboThreadInput();
   const messagesEndRef = useRef(null);
@@ -294,13 +294,20 @@ function ChatPanel({ merchantId, onClose }) {
   };
 
   return (
-    <div className="chat-panel">
+    <div className={`chat-panel ${fullscreen ? "chat-panel-fullscreen" : ""}`}>
       <div className="chat-panel-header">
         <div className="chat-panel-title">
           <span>⚡</span> AI Employee
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="chat-panel-icon-btn" onClick={startNewThread} title="New chat">✦</button>
+          <button
+            className="chat-panel-icon-btn"
+            onClick={onToggleFullscreen}
+            title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {fullscreen ? "⤡" : "⤢"}
+          </button>
           <button className="chat-panel-icon-btn" onClick={onClose} title="Close">✕</button>
         </div>
       </div>
@@ -413,6 +420,7 @@ function DashboardInner() {
   const [notifications, setNotifications] = useState([]);
   const [lastSyncedAt, setLastSyncedAt] = useState(merchant?.last_synced_at || null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatFullscreen, setChatFullscreen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
 
   /* Derived */
@@ -753,7 +761,7 @@ CRITICAL RULES:
 
       {/* ── FLOATING CHAT BUTTON ── */}
       {!chatOpen && (
-        <button className="fab-chat-btn" onClick={() => setChatOpen(true)}>
+        <button className="fab-chat-btn" onClick={() => { setChatOpen(true); setChatFullscreen(false); }}>
           <span className="fab-chat-icon">⚡</span>
           <span>Chat with AI</span>
         </button>
@@ -770,7 +778,12 @@ CRITICAL RULES:
           autoGenerateThreadName={true}
           contextHelpers={contextHelpers}
         >
-          <ChatPanel merchantId={merchantId} onClose={() => setChatOpen(false)} />
+          <ChatPanel
+            merchantId={merchantId}
+            onClose={() => { setChatOpen(false); setChatFullscreen(false); }}
+            fullscreen={chatFullscreen}
+            onToggleFullscreen={() => setChatFullscreen((v) => !v)}
+          />
         </TamboProvider>
       )}
     </div>
