@@ -18,7 +18,9 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _secret_key() -> str:
-    secret = os.getenv("JWT_SECRET", "")
+    secret = os.getenv("JWT_SECRET", "").strip()
+    if not secret:
+        secret = os.getenv("API_KEY", "").strip() or os.getenv("INTERNAL_API_KEY", "").strip()
     if not secret:
         raise RuntimeError("JWT_SECRET is not configured")
     return secret
