@@ -40,7 +40,7 @@ def fetch_merchant_data(supabase: Client, merchant_id: str, days: int = 7) -> di
     payments = payments_resp.data or []
 
     # Fetch ads
-    ads_resp = supabase.table("ads_performance").select("*").eq(
+    ads_resp = supabase.table("meta_ads").select("*").eq(
         "merchant_id", merchant_id
     ).gte("date", from_date).execute()
     ads = ads_resp.data or []

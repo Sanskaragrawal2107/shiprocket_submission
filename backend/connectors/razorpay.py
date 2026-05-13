@@ -3,7 +3,6 @@ Razorpay Connector — REAL API integration.
 Uses the official razorpay Python SDK to fetch payment/order data.
 """
 
-import os
 from datetime import date, datetime, timezone
 from .base import BaseConnector
 
@@ -16,10 +15,10 @@ except ImportError:
 class RazorpayConnector(BaseConnector):
     """Connects to Razorpay API to fetch payment data."""
 
-    def __init__(self, merchant_id: str):
-        super().__init__(merchant_id)
-        self.key_id = os.getenv("RAZORPAY_KEY_ID", "")
-        self.key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    def __init__(self, merchant_id: str, credentials: dict | None = None):
+        super().__init__(merchant_id, credentials)
+        self.key_id = self.credentials.get("razorpay_key_id", "")
+        self.key_secret = self.credentials.get("razorpay_key_secret", "")
         self.client = None
         if razorpay and self.key_id and self.key_secret:
             self.client = razorpay.Client(auth=(self.key_id, self.key_secret))

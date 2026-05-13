@@ -28,7 +28,7 @@ export const InsightsListSchema = z.object({
 const SEVERITY_ICONS = { critical: "🔴", warning: "🟡", info: "🔵" };
 
 /* ── Component ─────────────────────────────────────────── */
-export function InsightsList({ insights, merchant_id, citations }) {
+export function InsightsList({ insights, citations }) {
   const safeInsights = Array.isArray(insights) ? insights : [];
 
   if (safeInsights.length === 0) {

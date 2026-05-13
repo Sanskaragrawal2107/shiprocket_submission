@@ -1,27 +1,26 @@
-"""
-Sync Job — Orchestrates all 4 connectors and upserts data to Supabase.
+"""Sync Job — Orchestrates all 4 connectors and upserts data to Supabase.
 
-Called by: POST /sync/{merchant_id}
-Also called by: Supabase pg_cron → Edge Function → this endpoint
-
-Uses upsert on source_row_ref to prevent duplicates on re-runs.
+The sync window is incremental: on first sync we pull the last 30 days, then
+we advance from the merchant's `last_synced_at` timestamp on subsequent runs.
+This keeps refreshes bounded and avoids re-fetching the entire history.
 """
 
-import os
-from datetime import date, timedelta
-from supabase_client import create_client, SupabaseClient
+from __future__ import annotations
 
-from connectors.shopify import ShopifyConnector
+from datetime import date, datetime, timedelta, timezone
+
+from connectors.meta_ads import MetaAdsConnector
 from connectors.razorpay import RazorpayConnector
 from connectors.shiprocket import ShiprocketConnector
-from connectors.meta_ads import MetaAdsConnector
+from connectors.shopify import ShopifyConnector
+from db import get_merchant_context, update_last_synced_at
+from supabase_client import SupabaseClient, create_client
 
 
 def get_supabase() -> SupabaseClient:
-    """Create a Supabase client using service key."""
-    url = os.getenv("SUPABASE_URL", "")
-    key = os.getenv("SUPABASE_SERVICE_KEY", "")
-    return create_client(url, key)
+    from os import getenv
+
+    return create_client(getenv("SUPABASE_URL", ""), getenv("SUPABASE_SERVICE_KEY", ""))
 
 
 def _upsert_batch(supabase: SupabaseClient, table: str, rows: list[dict], batch_size: int = 50) -> int:
@@ -51,55 +50,54 @@ def _upsert_batch(supabase: SupabaseClient, table: str, rows: list[dict], batch_
 async def run_sync(merchant_id: str) -> dict:
     """
     Run sync for a merchant: fetch from all 4 connectors, upsert to Supabase.
-    
-    Returns a summary dict with counts per connector.
+
+    Returns a summary dict with counts per connector and detailed errors.
     """
     supabase = get_supabase()
+    merchant = get_merchant_context(merchant_id)
 
-    from_date = date.today() - timedelta(days=30)
-    to_date = date.today()
+    sync_end = datetime.now(timezone.utc)
+    sync_start = merchant.last_synced_at or (sync_end - timedelta(days=30))
 
-    results = {}
+    from_date = sync_start.date()
+    to_date = sync_end.date()
 
-    # --- 1. Shopify → orders table ---
-    try:
-        shopify = ShopifyConnector(merchant_id)
-        shopify_orders = shopify.fetch_orders(from_date, to_date)
-        count = _upsert_batch(supabase, "orders", shopify_orders)
-        results["shopify"] = {"status": "ok", "rows": count}
-    except Exception as e:
-        print(f"[Sync] Shopify error: {e}")
-        results["shopify"] = {"status": "error", "error": str(e)}
+    credentials = merchant.to_dict()
+    results: dict[str, dict] = {}
+    errors: list[dict] = []
 
-    # --- 2. Razorpay → payments table ---
-    try:
-        razorpay = RazorpayConnector(merchant_id)
-        razorpay_payments = razorpay.fetch_orders(from_date, to_date)
-        count = _upsert_batch(supabase, "payments", razorpay_payments)
-        results["razorpay"] = {"status": "ok", "rows": count}
-    except Exception as e:
-        print(f"[Sync] Razorpay error: {e}")
-        results["razorpay"] = {"status": "error", "error": str(e)}
+    connectors = {
+        "shopify": (ShopifyConnector, "orders"),
+        "razorpay": (RazorpayConnector, "payments"),
+        "shiprocket": (ShiprocketConnector, "deliveries"),
+        "meta_ads": (MetaAdsConnector, "meta_ads"),
+    }
 
-    # --- 3. Shiprocket (Mock) → deliveries table ---
-    try:
-        shiprocket = ShiprocketConnector(merchant_id)
-        deliveries = shiprocket.fetch_orders(from_date, to_date)
-        count = _upsert_batch(supabase, "deliveries", deliveries)
-        results["shiprocket"] = {"status": "ok", "rows": count}
-    except Exception as e:
-        print(f"[Sync] Shiprocket error: {e}")
-        results["shiprocket"] = {"status": "error", "error": str(e)}
+    for connector_name, (connector_cls, table_name) in connectors.items():
+        try:
+            connector = connector_cls(merchant_id, credentials)
+            rows = connector.fetch_orders(from_date, to_date)
+            count = _upsert_batch(supabase, table_name, rows)
+            results[connector_name] = {
+                "status": "ok",
+                "rows": count,
+                "table": table_name,
+            }
+        except Exception as exc:
+            error_detail = {"connector": connector_name, "error": str(exc)}
+            print(f"[Sync] {connector_name} error for {merchant_id}: {exc}")
+            results[connector_name] = {"status": "error", **error_detail}
+            errors.append(error_detail)
 
-    # --- 4. Meta Ads (Mock) → ads_performance table ---
-    try:
-        meta = MetaAdsConnector(merchant_id)
-        ads_data = meta.fetch_orders(from_date, to_date)
-        count = _upsert_batch(supabase, "ads_performance", ads_data)
-        results["meta_ads"] = {"status": "ok", "rows": count}
-    except Exception as e:
-        print(f"[Sync] Meta Ads error: {e}")
-        results["meta_ads"] = {"status": "error", "error": str(e)}
+    if not errors:
+        update_last_synced_at(merchant_id, sync_end)
 
     print(f"[Sync] Completed for {merchant_id}: {results}")
-    return results
+    return {
+        "merchant_id": merchant_id,
+        "status": "completed" if not errors else "partial_failure",
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "results": results,
+        "errors": errors,
+    }

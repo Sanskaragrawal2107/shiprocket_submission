@@ -328,7 +328,7 @@ def get_courier_performance(merchant_id: str) -> dict:
 def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
     """Campaign spend, ROAS, clicks, conversions. With citations."""
     supabase = get_supabase()
-    ads_result = supabase.table("ads_performance").select("*").eq(
+    ads_result = supabase.table("meta_ads").select("*").eq(
         "merchant_id", merchant_id
     ).gte("date", from_date).lte("date", to_date).execute()
 
@@ -405,7 +405,7 @@ def get_profitability(merchant_id: str, from_date: str, to_date: str) -> dict:
         "merchant_id", merchant_id
     ).gte("dispatch_date", from_date).lte("dispatch_date", to_date).execute()
 
-    ads_result = supabase.table("ads_performance").select("*").eq(
+    ads_result = supabase.table("meta_ads").select("*").eq(
         "merchant_id", merchant_id
     ).gte("date", from_date).lte("date", to_date).execute()
 
@@ -484,7 +484,7 @@ def get_agent_insights(merchant_id: str) -> dict:
         return {
             "data": {"insights": [], "has_recommendations": False},
             "citations": [],
-            "summary": "No agent insights available. Run the agent first: POST /agent/run/merchant_001",
+            "summary": "No agent insights available. Run the agent first: POST /agent/run/{merchant_id}",
         }
 
     latest = insights[0]

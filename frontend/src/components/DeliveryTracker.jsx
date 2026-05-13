@@ -52,7 +52,7 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
   })).filter(d => d.value > 0);
 
   return (
-    <div className="data-card" style={{ minWidth: 340, maxWidth: 520 }}>
+    <div className="data-card" style={{ width: "min(100%, 520px)", minWidth: 0, maxWidth: "100%" }}>
       <div className="data-card-header">
         <div className="data-card-title">
           <span style={{ fontSize: 16 }}>🚚</span>
@@ -60,17 +60,17 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
         </div>
         <span className="data-card-badge badge-neutral">{total} shipments</span>
       </div>
-      <div className="data-card-body">
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div className="chart-container" style={{ width: 160, height: 160 }}>
+      <div className="data-card-body" style={{ padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div className="chart-container" style={{ width: 132, height: 132, flex: "0 0 auto" }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={45}
-                  outerRadius={70}
+                  innerRadius={34}
+                  outerRadius={58}
                   paddingAngle={3}
                   dataKey="value"
                   stroke="none"
@@ -90,8 +90,8 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ flex: 1 }}>
-            <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <div className="stats-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
               {SEGMENTS.map(s => (
                 <div key={s.key} className="stat-item" style={{ padding: 10 }}>
                   <div className="stat-item-value" style={{ color: s.color, fontSize: 18 }}>
@@ -105,7 +105,7 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
         </div>
 
         {(safeRtoRate !== null || safeAvgDays !== null) && (
-          <div className="stats-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
+          <div className="stats-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", marginTop: 12 }}>
             {safeRtoRate !== null && (
               <div className="stat-item">
                 <div className="stat-item-value" style={{

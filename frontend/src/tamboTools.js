@@ -10,9 +10,29 @@
 import { z } from "zod";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const AUTH_TOKEN_KEY = "d2c_ai_employee_token";
+const MERCHANT_KEY = "d2c_ai_employee_merchant";
+
+function getStoredMerchantId() {
+  try {
+    const merchantRaw = localStorage.getItem(MERCHANT_KEY);
+    if (!merchantRaw) return "";
+    const merchant = JSON.parse(merchantRaw);
+    return merchant?.merchant_id || "";
+  } catch {
+    return "";
+  }
+}
+
+function getAuthHeaders() {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 async function get(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return res.json();
 }
@@ -20,7 +40,7 @@ async function get(path) {
 async function post(path, body = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
@@ -40,49 +60,51 @@ export const tamboTools = [
     description:
       "Trigger a full data sync for a merchant. Pulls fresh data from Shopify, Razorpay, Shiprocket, and Meta Ads and saves to the database. Call this when the user asks to sync or refresh data.",
     inputSchema: z.object({
-      merchant_id: z
-        .string()
-        .describe("Merchant ID — use 'merchant_001' if not specified"),
+      merchant_id: z.string().optional().describe("Merchant ID. Defaults to the signed-in merchant."),
     }),
     outputSchema: GenericResponseSchema,
-    tool: async ({ merchant_id }) => post(`/sync/${merchant_id}`),
+    tool: async ({ merchant_id }) => {
+      const resolvedMerchantId = merchant_id || getStoredMerchantId();
+      if (!resolvedMerchantId) {
+        throw new Error("No signed-in merchant available for sync");
+      }
+      return post(`/sync/${resolvedMerchantId}`);
+    },
   },
   {
     name: "runAgent",
     description:
       "Run the AI agent to analyze a merchant's data, detect anomalies, and generate recommendations. Call this when the user asks to run analysis or detect issues.",
     inputSchema: z.object({
-      merchant_id: z
-        .string()
-        .describe("Merchant ID — use 'merchant_001' if not specified"),
+      merchant_id: z.string().optional().describe("Merchant ID. Defaults to the signed-in merchant."),
     }),
     outputSchema: GenericResponseSchema,
-    tool: async ({ merchant_id }) => post(`/agent/run/${merchant_id}`),
+    tool: async ({ merchant_id }) => {
+      const resolvedMerchantId = merchant_id || getStoredMerchantId();
+      if (!resolvedMerchantId) {
+        throw new Error("No signed-in merchant available for analysis");
+      }
+      return post(`/agent/run/${resolvedMerchantId}`);
+    },
   },
   {
     name: "getInsights",
     description:
       "Get the latest AI-generated insights and anomaly alerts for a merchant.",
     inputSchema: z.object({
-      merchant_id: z
-        .string()
-        .describe("Merchant ID — use 'merchant_001' if not specified"),
+      merchant_id: z.string().optional().describe("Merchant ID. Defaults to the signed-in merchant."),
     }),
     outputSchema: z.object({
       merchant_id: z.string().optional(),
       insights: z.array(z.any()).optional(),
       count: z.number().optional(),
     }),
-    tool: async ({ merchant_id }) => get(`/agent/insights/${merchant_id}`),
-  },
-  {
-    name: "checkHealth",
-    description:
-      "Check the health and connectivity status of all data connectors (Shopify, Razorpay, Shiprocket, Meta Ads).",
-    inputSchema: z.object({}),
-    outputSchema: z.object({
-      connectors: z.record(z.any()).optional(),
-    }),
-    tool: async () => get("/connectors/status"),
+    tool: async ({ merchant_id }) => {
+      const resolvedMerchantId = merchant_id || getStoredMerchantId();
+      if (!resolvedMerchantId) {
+        throw new Error("No signed-in merchant available for insights");
+      }
+      return get(`/agent/insights/${resolvedMerchantId}`);
+    },
   },
 ];

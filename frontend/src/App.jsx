@@ -10,80 +10,125 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   TamboProvider,
   useTambo,
   useTamboThreadInput,
+  useTamboThreadList,
   ComponentRenderer,
 } from "@tambo-ai/react";
 import { tamboComponents } from "./tamboComponents";
 import { tamboTools } from "./tamboTools";
+import { useAuth } from "./AuthContext";
 
 const TAMBO_API_KEY = import.meta.env.VITE_TAMBO_API_KEY || "";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-/* ══════════════════════════════════════════════════════════
-   useMerchants — fetches merchant list from Supabase via backend
-   ══════════════════════════════════════════════════════════ */
-function useMerchants() {
-  const [merchants, setMerchants] = useState([]);
-  const [loading, setLoading]    = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/merchants`)
-      .then((r) => (r.ok ? r.json() : { merchants: [] }))
-      .then((d) => setMerchants(d.merchants || []))
-      .catch(() => setMerchants([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { merchants, loading };
-}
-
-/* ══════════════════════════════════════════════════════════
-   MerchantSelector — compact dropdown in the sidebar
-   ══════════════════════════════════════════════════════════ */
-function MerchantSelector({ merchants, selected, onChange, loading }) {
+function MerchantBadge({ merchantId, email }) {
   return (
-    <div className="merchant-selector">
-      <div className="merchant-selector-label">Merchant</div>
-      {loading ? (
-        <div className="merchant-selector-loading">Loading…</div>
-      ) : (
-        <select
-          className="merchant-selector-select"
-          value={selected}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {merchants.length === 0 && (
-            <option value="merchant_001">merchant_001 (default)</option>
-          )}
-          {merchants.map((m) => (
-            <option key={m.merchant_id} value={m.merchant_id}>
-              {m.name ? `${m.name} (${m.merchant_id})` : m.merchant_id}
-            </option>
-          ))}
-        </select>
-      )}
-      <div className="merchant-selector-id">{selected}</div>
+    <div className="merchant-badge">
+      <div className="merchant-badge-label">Signed in merchant</div>
+      <div className="merchant-badge-id">{merchantId}</div>
+      {email ? <div className="merchant-badge-email">{email}</div> : null}
     </div>
   );
+}
+
+function formatThreadMeta(thread) {
+  const rawDate =
+    thread?.updatedAt ||
+    thread?.updated_at ||
+    thread?.createdAt ||
+    thread?.created_at ||
+    thread?.lastMessageAt ||
+    thread?.last_message_at;
+
+  if (!rawDate) return "Recent";
+
+  const parsed = new Date(rawDate);
+  if (Number.isNaN(parsed.getTime())) return "Recent";
+
+  return parsed.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function getVisibleMessages(messages) {
+  return (Array.isArray(messages) ? messages : []).filter((message) => message?.role !== "system");
+}
+
+function hasVisibleText(content) {
+  if (typeof content === "string") {
+    return content.trim().length > 0;
+  }
+
+  if (Array.isArray(content)) {
+    return content.some((block) => {
+      if (block?.type === "text") return typeof block.text === "string" && block.text.trim().length > 0;
+      if (block?.type === "component") return true;
+      return false;
+    });
+  }
+
+  return Boolean(String(content || "").trim());
+}
+
+function HistoryPanel({ threads, loading, activeThreadId, onSelectThread, onNewChat }) {
+  const threadList = Array.isArray(threads) ? threads : [];
+
+  return (
+    <section className="history-panel" aria-label="Conversation history">
+      <div className="sidebar-section-title">History</div>
+      <button type="button" className="history-new-btn" onClick={onNewChat}>
+        + New Chat
+      </button>
+
+      {loading ? (
+        <div className="history-empty">Loading saved chats…</div>
+      ) : threadList.length > 0 ? (
+        <div className="history-list">
+          {threadList.map((thread) => {
+            const threadId = thread?.id;
+            const title = thread?.name || thread?.title || "Untitled chat";
+            const isActive = threadId && threadId === activeThreadId;
+
+            return (
+              <button
+                key={threadId}
+                type="button"
+                className={`history-item ${isActive ? "active" : ""}`}
+                onClick={() => threadId && onSelectThread(threadId)}
+              >
+                <span className="history-item-title">{title}</span>
+                <span className="history-item-meta">{formatThreadMeta(thread)}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="history-empty">No saved chats yet.</div>
+      )}
+    </section>
+  );
+}
+
+function MessageMarkdown({ content }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
 }
 
 /* ══════════════════════════════════════════════════════════
    Sidebar Component
    ══════════════════════════════════════════════════════════ */
-function Sidebar({ onSuggestion, merchantId, merchants, merchantsLoading, onMerchantChange }) {
-  const navItems = [
-    { icon: "💬", label: "Chat",       query: null },
-    { icon: "📊", label: "Revenue",    query: "Show me revenue data" },
-    { icon: "📦", label: "Orders",     query: "Show me orders breakdown" },
-    { icon: "🚚", label: "Deliveries", query: "Show delivery status and RTO rate" },
-    { icon: "💳", label: "Payments",   query: "Show payment ledger" },
-    { icon: "📈", label: "Ads",        query: "Show ads performance and ROAS" },
-    { icon: "🧠", label: "Insights",   query: "Show AI insights and anomalies" },
-  ];
-
+function Sidebar({
+  onSuggestion,
+  merchantId,
+  merchantEmail,
+  historyThreads,
+  historyLoading,
+  activeThreadId,
+  onSelectThread,
+  onNewChat,
+}) {
   return (
     <aside className="sidebar">
       {/* Logo */}
@@ -97,29 +142,18 @@ function Sidebar({ onSuggestion, merchantId, merchants, merchantsLoading, onMerc
         </div>
       </div>
 
-      {/* Merchant Selector */}
-      <MerchantSelector
-        merchants={merchants}
-        selected={merchantId}
-        onChange={onMerchantChange}
-        loading={merchantsLoading}
-      />
+      <MerchantBadge merchantId={merchantId} email={merchantEmail} />
 
-      {/* Navigation */}
       <div className="sidebar-section">
-        <div className="sidebar-section-title">Dashboard</div>
-        {navItems.map((item, i) => (
-          <div
-            key={i}
-            className={`sidebar-nav-item ${item.label === "Chat" && !item.query ? "active" : ""}`}
-            onClick={() => item.query && onSuggestion(item.query)}
-          >
-            <span className="sidebar-nav-icon">{item.icon}</span>
-            {item.label}
-          </div>
-        ))}
+        <HistoryPanel
+          threads={historyThreads}
+          loading={historyLoading}
+          activeThreadId={activeThreadId}
+          onSelectThread={onSelectThread}
+          onNewChat={onNewChat}
+        />
 
-        <div className="sidebar-section-title" style={{ marginTop: 20 }}>
+        <div className="sidebar-section-title sidebar-section-title-spaced">
           Quick Actions
         </div>
         <div
@@ -189,19 +223,27 @@ function WelcomeScreen({ onSuggestion, merchantId }) {
 /* ══════════════════════════════════════════════════════════
    Chat Interface (inside TamboProvider)
    ══════════════════════════════════════════════════════════ */
-function ChatInterface({ merchantId, merchants, merchantsLoading, onMerchantChange }) {
+function ChatInterface({ merchantId, userEmail }) {
   const {
     messages,
     isStreaming,
     isWaiting,
     currentThreadId,
     startNewThread,
+    switchThread,
   } = useTambo();
 
+  const { data: threadListData, isLoading: historyLoading } = useTamboThreadList({
+    userKey: `d2c-${merchantId}`,
+    limit: 8,
+  });
+
   const { value, setValue, submit, isPending } = useTamboThreadInput();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const messagesEndRef = useRef(null);
   const textareaRef    = useRef(null);
+  const visibleMessages = getVisibleMessages(messages);
 
   // Auto-scroll
   useEffect(() => {
@@ -241,23 +283,43 @@ function ChatInterface({ merchantId, merchants, merchantsLoading, onMerchantChan
   };
 
   const hasMessages = messages && messages.length > 0;
+  const historyThreads = threadListData?.threads || [];
+
+  const handleSelectThread = (threadId) => {
+    switchThread(threadId);
+  };
 
   return (
-    <div className="app-container">
-      <Sidebar
-        onSuggestion={fireSuggestion}
-        merchantId={merchantId}
-        merchants={merchants}
-        merchantsLoading={merchantsLoading}
-        onMerchantChange={onMerchantChange}
-      />
+    <div className={`app-container ${isSidebarOpen ? "" : "sidebar-collapsed"}`}>
+      {isSidebarOpen && (
+        <Sidebar
+          onSuggestion={fireSuggestion}
+          merchantId={merchantId}
+          merchantEmail={userEmail}
+          historyThreads={historyThreads}
+          historyLoading={historyLoading}
+          activeThreadId={currentThreadId}
+          onSelectThread={handleSelectThread}
+          onNewChat={startNewThread}
+        />
+      )}
 
       <main className="main-content">
         {/* Header */}
         <header className="main-header">
-          <span className="main-header-title">
-            {currentThreadId ? "Conversation" : "New Chat"}
-          </span>
+          <div className="main-header-left">
+            <button
+              type="button"
+              className="sidebar-toggle-btn"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+            >
+              {isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
+            </button>
+            <span className="main-header-title">
+              {currentThreadId ? "Conversation" : "New Chat"}
+            </span>
+          </div>
           <div className="main-header-actions">
             <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 8 }}>
               📍 {merchantId}
@@ -274,57 +336,52 @@ function ChatInterface({ merchantId, merchants, merchantsLoading, onMerchantChan
             <WelcomeScreen onSuggestion={fireSuggestion} merchantId={merchantId} />
           ) : (
             <div className="chat-messages">
-              {messages.map((msg) => (
+              {visibleMessages.map((msg) => (
                 <div key={msg.id}>
-                  {Array.isArray(msg.content) ? (
-                    msg.content.map((block, idx) => {
-                      if (block.type === "text" && block.text) {
-                        return (
-                          <div
-                            key={`${msg.id}-text-${idx}`}
-                            className={`message-bubble ${msg.role}`}
-                          >
-                            <div className="message-role-label">
-                              {msg.role === "user" ? "You" : "AI Employee"}
+                  {hasVisibleText(msg.content) && (
+                    Array.isArray(msg.content) ? (
+                      msg.content.map((block, idx) => {
+                        if (block.type === "text" && block.text) {
+                          return (
+                            <div
+                              key={`${msg.id}-text-${idx}`}
+                              className={`message-bubble ${msg.role}`}
+                            >
+                              <div className="message-role-label">
+                                {msg.role === "user" ? "You" : "AI Employee"}
+                              </div>
+                              <div className="message-markdown">
+                                <MessageMarkdown content={block.text} />
+                              </div>
                             </div>
-                            {block.text}
-                          </div>
-                        );
-                      }
-                      if (block.type === "component") {
-                        return (
-                          <div
-                            key={block.id || `${msg.id}-comp-${idx}`}
-                            className="message-component-wrapper"
-                          >
-                            <ComponentRenderer
-                              content={block}
-                              threadId={currentThreadId}
-                              messageId={msg.id}
-                            />
-                          </div>
-                        );
-                      }
-                      if (block.type === "tool_use") {
-                        return (
-                          <div
-                            key={block.id || `${msg.id}-tool-${idx}`}
-                            className="tool-call-indicator"
-                          >
-                            <div className="spinner"></div>
-                            {block.statusMessage || `Running ${block.name}…`}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })
-                  ) : (
-                    <div className={`message-bubble ${msg.role}`}>
-                      <div className="message-role-label">
-                        {msg.role === "user" ? "You" : "AI Employee"}
+                          );
+                        }
+                        if (block.type === "component") {
+                          return (
+                            <div
+                              key={block.id || `${msg.id}-comp-${idx}`}
+                              className="message-component-wrapper"
+                            >
+                              <ComponentRenderer
+                                content={block}
+                                threadId={currentThreadId}
+                                messageId={msg.id}
+                              />
+                            </div>
+                          );
+                        }
+                        return null;
+                      })
+                    ) : (
+                      <div className={`message-bubble ${msg.role}`}>
+                        <div className="message-role-label">
+                          {msg.role === "user" ? "You" : "AI Employee"}
+                        </div>
+                        <div className="message-markdown">
+                          <MessageMarkdown content={String(msg.content)} />
+                        </div>
                       </div>
-                      {String(msg.content)}
-                    </div>
+                    )
                   )}
                   {msg.renderedComponent && (
                     <div className="message-component-wrapper">
@@ -391,15 +448,21 @@ function ChatInterface({ merchantId, merchants, merchantsLoading, onMerchantChan
    App Root — manages merchantId state, wraps in TamboProvider
    ══════════════════════════════════════════════════════════ */
 export default function App() {
-  const { merchants, loading: merchantsLoading } = useMerchants();
-  const [merchantId, setMerchantId] = useState("merchant_001");
+  const { merchant, user, loading: authLoading } = useAuth();
+  const merchantId = merchant?.merchant_id || "";
+  const userEmail = user?.email || merchant?.email || "";
 
-  // Once merchants load, default to the first one
-  useEffect(() => {
-    if (merchants.length > 0 && merchantId === "merchant_001") {
-      setMerchantId(merchants[0].merchant_id);
-    }
-  }, [merchants]);
+  if (authLoading || !merchantId) {
+    return (
+      <div className="auth-loading-shell">
+        <div className="auth-loading-card">
+          <div className="auth-loading-kicker">D2C AI Employee</div>
+          <div className="auth-loading-title">Preparing your dashboard</div>
+          <div className="auth-loading-copy">Checking your session and merchant workspace.</div>
+        </div>
+      </div>
+    );
+  }
 
   // Build dynamic context helpers that always reflect current merchantId
   const contextHelpers = {
@@ -437,6 +500,7 @@ CRITICAL RULES (always follow):
 
   return (
     <TamboProvider
+      key={merchantId}
       apiKey={TAMBO_API_KEY}
       userKey={`d2c-${merchantId}`}
       components={tamboComponents}
@@ -447,9 +511,7 @@ CRITICAL RULES (always follow):
     >
       <ChatInterface
         merchantId={merchantId}
-        merchants={merchants}
-        merchantsLoading={merchantsLoading}
-        onMerchantChange={setMerchantId}
+        userEmail={userEmail}
       />
     </TamboProvider>
   );

@@ -41,8 +41,8 @@ CAMPAIGNS = [
 class MetaAdsConnector(BaseConnector):
     """Mock connector generating realistic Meta Ads campaign data."""
 
-    def __init__(self, merchant_id: str):
-        super().__init__(merchant_id)
+    def __init__(self, merchant_id: str, credentials: dict | None = None):
+        super().__init__(merchant_id, credentials)
         random.seed(123)  # Deterministic
 
     def _generate_campaign_data(self, from_date: date, to_date: date) -> list[dict]:

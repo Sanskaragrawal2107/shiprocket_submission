@@ -3,7 +3,6 @@ Shopify Connector — REAL API integration.
 Uses Shopify REST Admin API 2024-01 to fetch orders.
 """
 
-import os
 import httpx
 from datetime import date, datetime
 from .base import BaseConnector
@@ -14,10 +13,10 @@ class ShopifyConnector(BaseConnector):
 
     API_VERSION = "2024-01"
 
-    def __init__(self, merchant_id: str):
-        super().__init__(merchant_id)
-        self.store_url = os.getenv("SHOPIFY_STORE_URL", "")
-        self.access_token = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+    def __init__(self, merchant_id: str, credentials: dict | None = None):
+        super().__init__(merchant_id, credentials)
+        self.store_url = self.credentials.get("shopify_store_url", "")
+        self.access_token = self.credentials.get("shopify_access_token", "")
         self.base_url = f"https://{self.store_url}/admin/api/{self.API_VERSION}"
 
     def _headers(self) -> dict:

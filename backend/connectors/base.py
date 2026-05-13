@@ -12,8 +12,9 @@ class BaseConnector(ABC):
     To add a 5th connector, simply subclass this and implement the 3 methods.
     """
 
-    def __init__(self, merchant_id: str):
+    def __init__(self, merchant_id: str, credentials: dict | None = None):
         self.merchant_id = merchant_id
+        self.credentials = credentials or {}
 
     @abstractmethod
     def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:

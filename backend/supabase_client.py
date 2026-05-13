@@ -41,6 +41,7 @@ class TableQuery:
         self._order_col = None
         self._order_desc = False
         self._limit_val = None
+        self._update_data = None
 
     def select(self, cols: str = "*") -> "TableQuery":
         self._select_cols = cols
@@ -79,11 +80,49 @@ class TableQuery:
         return url + "?" + "&".join(params)
 
     def execute(self) -> "QueryResult":
+        if self._update_data is not None:
+            if self._update_data == {"__delete__": True}:
+                return self.execute_delete()
+            return self.execute_update()
+
         url = self._build_url()
         with httpx.Client(timeout=30) as client:
             resp = client.get(url, headers=self.client._headers())
             resp.raise_for_status()
             return QueryResult(resp.json())
+
+    def update(self, data: dict) -> "TableQuery":
+        self._update_data = data
+        return self
+
+    def delete(self) -> "TableQuery":
+        self._update_data = {"__delete__": True}
+        return self
+
+    def _build_write_url(self) -> str:
+        url = f"{self.client.rest_url}/{self._table}"
+        if self._filters:
+            url += "?" + "&".join(self._filters)
+        return url
+
+    def _write(self, method: str, data: dict | list[dict] | None = None) -> "QueryResult":
+        url = self._build_write_url()
+        headers = self.client._headers()
+        headers["Prefer"] = "return=representation"
+        with httpx.Client(timeout=30) as client:
+            resp = client.request(method, url, json=data, headers=headers)
+            resp.raise_for_status()
+            if resp.content:
+                return QueryResult(resp.json())
+            return QueryResult([])
+
+    def execute_update(self) -> "QueryResult":
+        if self._update_data is None:
+            raise ValueError("No update payload specified")
+        return self._write("PATCH", self._update_data)
+
+    def execute_delete(self) -> "QueryResult":
+        return self._write("DELETE")
 
     def insert(self, data: dict | list[dict]) -> "QueryResult":
         url = f"{self.client.rest_url}/{self._table}"

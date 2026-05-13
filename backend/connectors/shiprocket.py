@@ -52,8 +52,8 @@ CITIES = {
 class ShiprocketConnector(BaseConnector):
     """Mock connector generating realistic delivery data."""
 
-    def __init__(self, merchant_id: str):
-        super().__init__(merchant_id)
+    def __init__(self, merchant_id: str, credentials: dict | None = None):
+        super().__init__(merchant_id, credentials)
         random.seed(42)  # Deterministic for reproducibility
 
     def _generate_deliveries(self, from_date: date, to_date: date) -> list[dict]:
