@@ -418,7 +418,7 @@ function DashboardInner() {
   /* Derived */
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  /* Fetch KPIs from insights metrics_checked */
+  /* Fetch KPIs from agent_insights.data_snapshot */
   const fetchInsights = useCallback(async () => {
     if (!merchantId) return;
     setInsightsLoading(true);
@@ -427,10 +427,10 @@ function DashboardInner() {
       const rows = Array.isArray(data?.insights) ? data.insights : [];
       setInsights(rows);
 
-      // Extract KPIs from the most recent insight's metrics_checked
-      const latest = rows.find((r) => r.metrics_checked);
-      if (latest?.metrics_checked) {
-        setKpis(latest.metrics_checked);
+      // DB field is data_snapshot (not metrics_checked)
+      const latest = rows.find((r) => r.data_snapshot);
+      if (latest?.data_snapshot) {
+        setKpis(latest.data_snapshot);
       }
     } catch (err) {
       console.error("Insights fetch failed:", err);
@@ -505,19 +505,91 @@ function DashboardInner() {
     }
   };
 
-  /* KPI display helpers */
-  const totalOrders = kpis?.total_orders ?? kpis?.orders_count ?? null;
-  const revenue = kpis?.total_revenue ?? kpis?.revenue ?? null;
-  const rtoRate = kpis?.rto_rate ?? null;
-  const roas = kpis?.roas ?? null;
-  const settlementGap = kpis?.settlement_gap_percent ?? null;
-  const adSpend = kpis?.total_ad_spend ?? kpis?.ad_spend ?? null;
+  /* KPI display helpers — data_snapshot field names from the actual DB */
+  const totalOrders = kpis?.total_orders ?? null;
+  const revenue = kpis?.total_revenue ?? null;
+  const rtoRate = kpis?.delivery_failure_rate != null
+    ? kpis.delivery_failure_rate * 100   // stored as 0–1 fraction
+    : null;
+  const roas = kpis?.overall_roas ?? null;
+  const settlementGap = null; // not yet in data_snapshot
+  const adSpend = kpis?.total_ad_spend ?? null;
 
-  /* Flatten insights — handle both legacy and new formats */
+  /**
+   * Flatten insights into displayable anomaly cards.
+   * The DB stores two useful fields:
+   *   - conditions_triggered: array of {condition, message, actual, threshold, details}
+   *   - recommendations: flat string array (group into one card per insight row)
+   */
   const allInsights = insights.flatMap((row) => {
-    if (Array.isArray(row.recommendations)) return row.recommendations;
-    if (row.title || row.type) return [row];
-    return [];
+    const cards = [];
+
+    // 1. conditions_triggered → one card per triggered condition
+    if (Array.isArray(row.conditions_triggered) && row.conditions_triggered.length > 0) {
+      row.conditions_triggered.forEach((ct, idx) => {
+        cards.push({
+          id: `${row.id}-cond-${idx}`,
+          title: ct.message || ct.condition || "Anomaly Detected",
+          issue: ct.message || "",
+          action: "",
+          priority: ct.actual > ct.threshold * 1.5 ? "P0" : "P1",
+          evidence: [{
+            metric: ct.condition,
+            value: ct.actual,
+            threshold: ct.threshold,
+            source_table: ct.details ? Object.keys(ct.details).join(", ") : "",
+          }],
+          estimated_saving: null,
+          created_at: row.triggered_at,
+        });
+      });
+    }
+
+    // 2. recommendations (flat string array) → group into one summary card
+    if (Array.isArray(row.recommendations) && row.recommendations.length > 0) {
+      // Find header lines (end with ":**") and their following body text
+      const sections = [];
+      let current = null;
+      row.recommendations.forEach((line) => {
+        if (typeof line !== "string") return;
+        if (line.endsWith(":**") || line.endsWith("**")) {
+          if (current) sections.push(current);
+          current = { title: line.replace(/\*+/g, "").replace(/:$/, "").trim(), lines: [] };
+        } else if (current) {
+          current.lines.push(line);
+        }
+      });
+      if (current) sections.push(current);
+
+      if (sections.length > 0) {
+        sections.forEach((sec, idx) => {
+          cards.push({
+            id: `${row.id}-rec-${idx}`,
+            title: sec.title,
+            issue: sec.lines[0] || "",
+            action: sec.lines.slice(1).join(" "),
+            priority: "P2",
+            evidence: [],
+            estimated_saving: row.estimated_saving,
+            created_at: row.triggered_at,
+          });
+        });
+      } else {
+        // Fallback: single card with all text
+        cards.push({
+          id: `${row.id}-rec-0`,
+          title: "Recommendation",
+          issue: row.recommendations.slice(0, 3).join(" "),
+          action: row.recommendations.slice(3).join(" "),
+          priority: "P2",
+          evidence: [],
+          estimated_saving: row.estimated_saving,
+          created_at: row.triggered_at,
+        });
+      }
+    }
+
+    return cards;
   });
 
   /* Build Tambo context helpers */
