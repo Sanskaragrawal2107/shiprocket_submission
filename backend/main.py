@@ -139,7 +139,15 @@ async def register_merchant(payload: RegisterRequest) -> dict[str, Any]:
         "last_synced_at": None,
     }
 
-    created = create_merchant(encrypt_merchant_payload(merchant_payload))
+    try:
+        encrypted_payload = encrypt_merchant_payload(merchant_payload)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    created = create_merchant(encrypted_payload)
     insert_default_thresholds(merchant_id)
 
     return {"merchant_id": merchant_id, "name": created.get("name", payload.name), "message": "registered"}
