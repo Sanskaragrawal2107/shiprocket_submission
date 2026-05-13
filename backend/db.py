@@ -93,7 +93,7 @@ def get_merchant_by_id(merchant_id: str) -> dict[str, Any] | None:
 
 
 def create_merchant(payload: dict[str, Any]) -> dict[str, Any]:
-    response = get_supabase().table("merchants").insert(payload).execute()
+    response = get_supabase().table("merchants").insert(payload)
     row = _first(response)
     if not row:
         raise RuntimeError("Merchant insert did not return a row")
@@ -137,7 +137,7 @@ def get_merchant_context(merchant_id: str) -> MerchantContext:
 
 def insert_default_thresholds(merchant_id: str) -> list[dict[str, Any]]:
     rows = [{"merchant_id": merchant_id, **item} for item in DEFAULT_THRESHOLD_ROWS]
-    response = get_supabase().table("merchant_thresholds").upsert(rows, on_conflict="merchant_id,metric").execute()
+    response = get_supabase().table("merchant_thresholds").upsert(rows, on_conflict="merchant_id,metric")
     return _rows(response)
 
 
@@ -157,7 +157,7 @@ def get_threshold_rows(merchant_id: str) -> list[dict[str, Any]]:
 
 def upsert_threshold_rows(merchant_id: str, thresholds: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = [{"merchant_id": merchant_id, **item} for item in thresholds]
-    response = get_supabase().table("merchant_thresholds").upsert(rows, on_conflict="merchant_id,metric").execute()
+    response = get_supabase().table("merchant_thresholds").upsert(rows, on_conflict="merchant_id,metric")
     return _rows(response)
 
 
@@ -187,7 +187,7 @@ def update_last_synced_at(merchant_id: str, synced_at: datetime | None = None) -
 
 
 def save_agent_insight(payload: dict[str, Any]) -> dict[str, Any]:
-    response = get_supabase().table("agent_insights").insert(payload).execute()
+    response = get_supabase().table("agent_insights").insert(payload)
     row = _first(response)
     if not row:
         raise RuntimeError("Failed to save agent insight")
@@ -208,7 +208,7 @@ def list_agent_insights(merchant_id: str, limit: int = 20) -> list[dict[str, Any
 
 
 def create_notification(payload: dict[str, Any]) -> dict[str, Any]:
-    response = get_supabase().table("notifications").insert(payload).execute()
+    response = get_supabase().table("notifications").insert(payload)
     row = _first(response)
     if not row:
         raise RuntimeError("Failed to save notification")
