@@ -24,6 +24,7 @@ function formatThreadMeta(thread) {
     thread?.created_at ||
     thread?.lastMessageAt ||
     thread?.last_message_at;
+  const parsed = rawDate ? new Date(rawDate) : new Date(0);
   if (Number.isNaN(parsed.getTime())) return "Recent";
 
   return parsed.toLocaleDateString([], { month: "short", day: "numeric" });
