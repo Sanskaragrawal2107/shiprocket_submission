@@ -503,8 +503,9 @@ function ChatPanel({ merchantId, onClose }) {
    ══════════════════════════════════════════════════════════ */
 
 function DashboardInner() {
-  const { merchant, logout, authFetch } = useAuth();
+  const { merchant, logout, authFetch, refreshSession } = useAuth();
   const merchantId = merchant?.merchant_id || "";
+  const isFirstTimeOnboarding = !merchant?.onboarded;
 
   /* State */
   const [kpis, setKpis] = useState(null);
@@ -614,10 +615,26 @@ function DashboardInner() {
   const handleOnboardingSave = async (values) => {
     try {
       await authFetch("/auth/me", { method: "PUT", body: { settings: values, onboarded: true } });
-      await authFetch("/auth/me");
+      await refreshSession();
       setShowOnboarding(false);
     } catch (err) {
       console.error("Onboarding save failed:", err);
+    }
+  };
+
+  const handleOnboardingSkip = async (defaults) => {
+    if (!isFirstTimeOnboarding) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    try {
+      await authFetch("/auth/me", { method: "PUT", body: { settings: defaults, onboarded: true } });
+      await refreshSession();
+    } catch (err) {
+      console.error("Onboarding skip failed:", err);
+    } finally {
+      setShowOnboarding(false);
     }
   };
 
@@ -736,7 +753,14 @@ ${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
 
   return (
     <div className="db-shell">
-      <OnboardingModal open={showOnboarding} initialSettings={merchant?.settings} onSave={handleOnboardingSave} onClose={() => setShowOnboarding(false)} />
+      <OnboardingModal
+        open={showOnboarding}
+        initialSettings={merchant?.settings}
+        onSave={handleOnboardingSave}
+        onSkip={handleOnboardingSkip}
+        onClose={() => setShowOnboarding(false)}
+        isFirstTime={isFirstTimeOnboarding}
+      />
       {/* ── TOP NAV ── */}
       <header className="db-nav">
         <div className="db-nav-left">
@@ -759,6 +783,15 @@ ${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
             onMarkRead={handleMarkRead}
             onMarkAll={handleMarkAll}
           />
+
+          <button
+            className="db-settings-btn"
+            onClick={() => setShowOnboarding(true)}
+            title="Merchant settings"
+            aria-label="Open merchant settings"
+          >
+            ⚙
+          </button>
 
           <button className="db-logout-btn" onClick={logout}>
             Logout
