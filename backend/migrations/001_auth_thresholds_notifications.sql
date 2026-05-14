@@ -83,6 +83,26 @@ create table if not exists public.notifications (
 );
 
 -- -----------------------------------------------------------------------------
+-- Meta Ads
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.meta_ads (
+  id uuid primary key default gen_random_uuid(),
+  merchant_id text references public.merchants (merchant_id) on delete cascade,
+  campaign_id text not null,
+  campaign_name text not null,
+  spend numeric default 0,
+  impressions bigint default 0,
+  clicks bigint default 0,
+  conversions bigint default 0,
+  date date not null,
+  source text,
+  source_row_ref text not null unique,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- -----------------------------------------------------------------------------
 -- JWT helper for RLS policies
 -- -----------------------------------------------------------------------------
 
@@ -90,6 +110,7 @@ create or replace function public.jwt_merchant_id()
 returns text
 language sql
 stable
+set search_path = public
 as $$
   select coalesce(auth.jwt() ->> 'merchant_id', '');
 $$;

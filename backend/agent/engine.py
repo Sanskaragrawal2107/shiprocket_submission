@@ -141,6 +141,181 @@ def _calculate_facts(merchant_id: str) -> MerchantFacts:
     return MerchantFacts(metrics=metrics, raw_counts=raw_counts, source_tables=source_tables)
 
 
+def _summary_citation(source: str, table: str, row_id: str, field: str, value: Any) -> dict[str, Any]:
+    return {
+        "source": source,
+        "ref": f"{table}#{row_id}",
+        "field": field,
+        "value": value,
+    }
+
+
+def build_profitability_snapshot(
+    merchant_id: str,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+) -> dict[str, Any]:
+    window_end = to_date or datetime.now(timezone.utc)
+    window_start = from_date or (window_end - timedelta(days=7))
+
+    orders = fetch_merchant_rows("orders", merchant_id, "order_date", window_start)
+    deliveries = fetch_merchant_rows("deliveries", merchant_id, "dispatch_date", window_start)
+    payments = fetch_merchant_rows("payments", merchant_id, "payment_date", window_start)
+    meta_ads = fetch_merchant_rows("meta_ads", merchant_id, "date", window_start)
+
+    total_orders = len(orders)
+    total_deliveries = len(deliveries)
+    total_revenue = sum(_safe_float(item.get("revenue")) for item in orders)
+    total_shipping = sum(_safe_float(item.get("shipping_cost")) for item in deliveries)
+    total_ads = sum(_safe_float(item.get("spend")) for item in meta_ads)
+    total_payments = sum(_safe_float(item.get("amount")) for item in payments)
+    settled_payments = sum(
+        _safe_float(item.get("amount"))
+        for item in payments
+        if str(item.get("status", "")).lower() in SETTLED_PAYMENT_STATUSES
+    )
+    failed_payments = sum(
+        _safe_float(item.get("amount"))
+        for item in payments
+        if str(item.get("status", "")).lower() in FAILED_PAYMENT_STATUSES
+    )
+    failed_deliveries = sum(
+        1 for item in deliveries
+        if str(item.get("status", "")).lower() in FAILED_DELIVERY_STATUSES
+    )
+    delivered_deliveries = sum(
+        1 for item in deliveries
+        if str(item.get("status", "")).lower() in DELIVERED_STATUSES
+    )
+
+    payments_pending = max(total_payments - settled_payments, 0)
+    delivery_success_rate = round((delivered_deliveries / total_deliveries) * 100, 1) if total_deliveries else 0.0
+    delivery_failure_rate = round((failed_deliveries / total_deliveries) * 100, 1) if total_deliveries else 0.0
+    payment_gap_rate = round((payments_pending / total_payments) * 100, 1) if total_payments else 0.0
+    overall_roas = round((total_revenue / total_ads), 2) if total_ads else 0.0
+
+    product_rows: dict[str, dict[str, Any]] = {}
+    for order in orders:
+        product_name = order.get("product_name") or "Unknown product"
+        bucket = product_rows.setdefault(
+            product_name,
+            {
+                "product_name": product_name,
+                "revenue": 0.0,
+                "order_count": 0,
+                "sample_refs": [],
+            },
+        )
+        bucket["revenue"] += _safe_float(order.get("revenue"))
+        bucket["order_count"] += 1
+        if order.get("source_row_ref"):
+            bucket["sample_refs"].append(order["source_row_ref"])
+
+    shipping_per_order = (total_shipping / total_orders) if total_orders else 0.0
+    ads_per_order = (total_ads / total_orders) if total_orders else 0.0
+
+    product_list: list[dict[str, Any]] = []
+    for product in product_rows.values():
+        shipping_alloc = round(shipping_per_order * product["order_count"], 2)
+        ads_alloc = round(ads_per_order * product["order_count"], 2)
+        net_margin = round(product["revenue"] - shipping_alloc - ads_alloc, 2)
+        margin_pct = round((net_margin / product["revenue"]) * 100, 1) if product["revenue"] else 0.0
+        product_list.append(
+            {
+                "product_name": product["product_name"],
+                "order_count": product["order_count"],
+                "revenue": round(product["revenue"], 2),
+                "shipping_cost": shipping_alloc,
+                "ads_cost": ads_alloc,
+                "net_margin": net_margin,
+                "margin_percent": margin_pct,
+                "sample_refs": product["sample_refs"][:2],
+            }
+        )
+
+    product_list.sort(key=lambda item: item["net_margin"])
+    least_profitable = product_list[0] if product_list else None
+
+    drivers: list[dict[str, Any]] = []
+    if total_ads > 0:
+        drivers.append(
+            {
+                "label": "Ad spend",
+                "value": round(total_ads, 2),
+                "detail": f"ROAS {overall_roas:.2f}" if overall_roas else "No measurable ROAS",
+            }
+        )
+    if total_deliveries > 0:
+        drivers.append(
+            {
+                "label": "Deliveries",
+                "value": total_deliveries,
+                "detail": f"{delivery_failure_rate:.1f}% failed / returned",
+            }
+        )
+    if total_payments > 0:
+        drivers.append(
+            {
+                "label": "Payments",
+                "value": round(total_payments, 2),
+                "detail": f"{payment_gap_rate:.1f}% unsettled",
+            }
+        )
+
+    if total_ads > 0 and overall_roas and overall_roas < 1:
+        root_cause = {
+            "title": "Paid acquisition is unprofitable",
+            "summary": f"Revenue is below ad spend, so the least profitable SKU is being pulled down primarily by paid acquisition inefficiency.",
+            "drivers": drivers[:2],
+        }
+    elif delivery_failure_rate >= 15:
+        root_cause = {
+            "title": "Delivery failures are hurting margin",
+            "summary": f"{delivery_failure_rate:.1f}% of shipments failed or returned, which increases re-attempt cost and reduces realized revenue.",
+            "drivers": drivers[:2],
+        }
+    elif payment_gap_rate >= 15:
+        root_cause = {
+            "title": "Payment settlement gap is high",
+            "summary": f"{payment_gap_rate:.1f}% of payment amount is still unsettled, so margin is being delayed or lost to failed capture.",
+            "drivers": drivers[:2],
+        }
+    else:
+        root_cause = {
+            "title": "Mixed operational drag",
+            "summary": "The product is not profitable because shipping, ads, and payment friction are collectively consuming the margin.",
+            "drivers": drivers[:3],
+        }
+
+    citations: list[dict[str, Any]] = []
+    if least_profitable:
+        sample_ref = least_profitable["sample_refs"][0] if least_profitable["sample_refs"] else f"product:{least_profitable['product_name']}"
+        citations.append(_summary_citation("shopify", "orders", sample_ref, "revenue", least_profitable["revenue"]))
+
+    citations.append(_summary_citation("shiprocket", "deliveries", f"aggregate:{window_start.date().isoformat()}", "delivery_failure_rate", delivery_failure_rate))
+    citations.append(_summary_citation("razorpay", "payments", f"aggregate:{window_start.date().isoformat()}", "payment_gap_rate", payment_gap_rate))
+    citations.append(_summary_citation("meta_ads", "meta_ads", f"aggregate:{window_start.date().isoformat()}", "total_spend", round(total_ads, 2)))
+
+    return {
+        "merchant_id": merchant_id,
+        "period": f"{window_start.date().isoformat()} to {window_end.date().isoformat()}",
+        "summary": {
+            "total_orders": total_orders,
+            "total_revenue": round(total_revenue, 2),
+            "total_shipping": round(total_shipping, 2),
+            "total_ads": round(total_ads, 2),
+            "delivery_success_rate": delivery_success_rate,
+            "delivery_failure_rate": delivery_failure_rate,
+            "payment_gap_rate": payment_gap_rate,
+            "overall_roas": overall_roas,
+        },
+        "least_profitable_product": least_profitable,
+        "root_cause": root_cause,
+        "products": product_list[:5],
+        "citations": citations,
+    }
+
+
 def _find_anomalies(metrics: dict[str, float], thresholds: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     anomalies: list[dict[str, Any]] = []
     for metric, config in thresholds.items():

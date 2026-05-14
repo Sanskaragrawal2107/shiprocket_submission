@@ -54,6 +54,16 @@ const GenericResponseSchema = z.object({
   data: z.any().optional(),
 });
 
+const ProfitabilitySchema = z.object({
+  merchant_id: z.string().optional(),
+  period: z.string().optional(),
+  summary: z.any().optional(),
+  least_profitable_product: z.any().optional(),
+  root_cause: z.any().optional(),
+  products: z.array(z.any()).optional(),
+  citations: z.array(z.any()).optional(),
+});
+
 export const tamboTools = [
   {
     name: "syncMerchant",
@@ -105,6 +115,22 @@ export const tamboTools = [
         throw new Error("No signed-in merchant available for insights");
       }
       return get(`/agent/insights/${resolvedMerchantId}`);
+    },
+  },
+  {
+    name: "getProfitability",
+    description:
+      "Analyze the merchant's profitability and return the least profitable product, root cause, and supporting metrics. Use this when the user asks for the worst product, margin analysis, or why a product is not profitable.",
+    inputSchema: z.object({
+      merchant_id: z.string().optional().describe("Merchant ID. Defaults to the signed-in merchant."),
+    }),
+    outputSchema: ProfitabilitySchema,
+    tool: async ({ merchant_id }) => {
+      const resolvedMerchantId = merchant_id || getStoredMerchantId();
+      if (!resolvedMerchantId) {
+        throw new Error("No signed-in merchant available for profitability analysis");
+      }
+      return get(`/analysis/profitability/${resolvedMerchantId}`);
     },
   },
 ];

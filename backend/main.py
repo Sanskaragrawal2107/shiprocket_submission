@@ -40,7 +40,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.engine import run_agent_for_merchant
+from agent.engine import build_profitability_snapshot, run_agent_for_merchant
 from auth import create_token, get_current_merchant, get_current_merchant_token
 from connectors.meta_ads import MetaAdsConnector
 from connectors.razorpay import RazorpayConnector
@@ -230,6 +230,18 @@ async def run_agent(
         raise
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Agent error: {exc}") from exc
+
+
+@app.get("/analysis/profitability/{merchant_id}")
+async def profitability_analysis(
+    merchant_id: str,
+    current_token: dict[str, Any] = Depends(get_current_merchant_token),
+) -> dict[str, Any]:
+    _merchant_id_matches(current_token, merchant_id)
+    try:
+        return build_profitability_snapshot(merchant_id)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Profitability analysis failed: {exc}") from exc
 
 
 @app.get("/agent/insights/{merchant_id}")

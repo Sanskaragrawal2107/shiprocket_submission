@@ -11,7 +11,7 @@ Runs on port 8001 with HTTP transport.
 import os
 import sys
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
 
 from fastmcp import FastMCP
+from agent.engine import build_profitability_snapshot
 from supabase_client import create_client, SupabaseClient
 
 
@@ -35,8 +36,11 @@ def get_supabase() -> SupabaseClient:
 
 def make_citation(row: dict, field: str) -> dict:
     """Build a citation dict from a database row."""
+    source = row.get("source", "unknown")
+    if source == "meta_ads_mock":
+        source = "meta_ads"
     return {
-        "source": row.get("source", "unknown"),
+        "source": source,
         "ref": row.get("source_row_ref", "unknown"),
         "field": field,
         "value": row.get(field),
@@ -142,7 +146,6 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
     ).gte("dispatch_date", from_date).lte("dispatch_date", to_date).execute()
 
     deliveries = result.data or []
-    citations = []
 
     # Group by courier + zone
     stats = {}
@@ -152,7 +155,14 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
         key = f"{courier}|{zone}"
 
         if key not in stats:
-            stats[key] = {"courier": courier, "zone": zone, "total": 0, "delivered": 0, "failed": 0, "cost_sum": 0}
+            stats[key] = {
+                "courier": courier,
+                "zone": zone,
+                "total": 0,
+                "delivered": 0,
+                "failed": 0,
+                "cost_sum": 0,
+            }
 
         stats[key]["total"] += 1
         if d.get("status") == "delivered":
@@ -177,8 +187,23 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
 
     rows.sort(key=lambda x: x["success_rate"])
 
+    citations = []
+    for row in rows[:5]:
+        citations.append({
+            "source": "shiprocket",
+            "ref": f"deliveries#courier:{row['courier']}|zone:{row['zone']}",
+            "field": "success_rate",
+            "value": row["success_rate"],
+        })
+
     total = len(deliveries)
     delivered = sum(1 for d in deliveries if d.get("status") == "delivered")
+    citations.append({
+        "source": "shiprocket",
+        "ref": f"deliveries#aggregate:{from_date}:{to_date}",
+        "field": "overall_success_rate",
+        "value": round(delivered / total, 3) if total > 0 else 0,
+    })
 
     return {
         "data": {
@@ -187,7 +212,7 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
             "overall_success_rate": round(delivered / total, 3) if total > 0 else 0,
             "period": f"{from_date} to {to_date}",
         },
-        "citations": citations[:50],  # Limit citations for large datasets
+        "citations": citations,
         "summary": f"Delivery stats: {total} deliveries, {delivered} delivered ({delivered/total:.0%} success rate). Worst: {rows[0]['courier']} in {rows[0]['zone']} ({rows[0]['success_rate']:.0%})." if rows else "No delivery data found.",
     }
 
@@ -358,7 +383,6 @@ def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
         campaigns[cid]["total_impressions"] += int(a.get("impressions", 0))
         campaigns[cid]["total_clicks"] += int(a.get("clicks", 0))
         campaigns[cid]["total_conversions"] += int(a.get("conversions", 0))
-        citations.append(make_citation(a, "spend"))
 
     total_conversions = sum(c["total_conversions"] for c in campaigns.values())
     campaign_list = []
@@ -375,6 +399,22 @@ def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
     total_spend = sum(c["total_spend"] for c in campaign_list)
     avg_roas = round(total_revenue / total_spend, 2) if total_spend > 0 else 0
 
+    citations = [
+        {
+            "source": "meta_ads",
+            "ref": f"meta_ads#campaign:{c['campaign_id']}|range:{from_date}:{to_date}",
+            "field": "spend",
+            "value": c["total_spend"],
+        }
+        for c in campaign_list[:5]
+    ]
+    citations.append({
+        "source": "shopify",
+        "ref": f"orders#aggregate:{from_date}:{to_date}",
+        "field": "total_revenue",
+        "value": round(total_revenue, 2),
+    })
+
     return {
         "data": {
             "campaigns": campaign_list,
@@ -383,7 +423,7 @@ def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
             "avg_roas": avg_roas,
             "period": f"{from_date} to {to_date}",
         },
-        "citations": citations[:50],
+        "citations": citations,
         "summary": f"Ad performance: ₹{total_spend:,.0f} spend, ₹{total_revenue:,.0f} revenue, avg ROAS {avg_roas}. " +
                    ", ".join(f"{c['campaign_name']} ROAS {c['roas']}" for c in campaign_list),
     }
@@ -394,75 +434,24 @@ def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
 
 @mcp.tool()
 def get_profitability(merchant_id: str, from_date: str, to_date: str) -> dict:
-    """Per-product: revenue - shipping_cost - ads_spend = net margin. With citations."""
-    supabase = get_supabase()
-
-    orders_result = supabase.table("orders").select("*").eq(
-        "merchant_id", merchant_id
-    ).gte("order_date", from_date).lte("order_date", to_date).execute()
-
-    deliveries_result = supabase.table("deliveries").select("*").eq(
-        "merchant_id", merchant_id
-    ).gte("dispatch_date", from_date).lte("dispatch_date", to_date).execute()
-
-    ads_result = supabase.table("meta_ads").select("*").eq(
-        "merchant_id", merchant_id
-    ).gte("date", from_date).lte("date", to_date).execute()
-
-    orders = orders_result.data or []
-    deliveries = deliveries_result.data or []
-    ads = ads_result.data or []
-    citations = []
-
-    # Revenue per product
-    products = {}
-    for o in orders:
-        name = o.get("product_name", "Unknown")
-        if name not in products:
-            products[name] = {"product_name": name, "revenue": 0, "order_count": 0}
-        products[name]["revenue"] += float(o.get("revenue", 0))
-        products[name]["order_count"] += 1
-        citations.append(make_citation(o, "revenue"))
-
-    # Total shipping cost (split proportionally)
-    total_shipping = sum(float(d.get("shipping_cost", 0)) for d in deliveries)
-    total_orders = len(orders) or 1
-    shipping_per_order = total_shipping / total_orders
-
-    # Total ads spend (split proportionally)
-    total_ads = sum(float(a.get("spend", 0)) for a in ads)
-    ads_per_order = total_ads / total_orders
-
-    product_list = []
-    for p in products.values():
-        shipping_alloc = round(shipping_per_order * p["order_count"], 2)
-        ads_alloc = round(ads_per_order * p["order_count"], 2)
-        net_margin = round(p["revenue"] - shipping_alloc - ads_alloc, 2)
-        margin_pct = round(net_margin / p["revenue"] * 100, 1) if p["revenue"] > 0 else 0
-
-        product_list.append({
-            "product_name": p["product_name"],
-            "revenue": round(p["revenue"], 2),
-            "shipping_cost": shipping_alloc,
-            "ads_cost": ads_alloc,
-            "net_margin": net_margin,
-            "margin_percent": margin_pct,
-            "order_count": p["order_count"],
-        })
-
-    product_list.sort(key=lambda x: x["net_margin"])
+    start_dt = datetime.fromisoformat(from_date)
+    end_dt = datetime.fromisoformat(to_date)
+    snapshot = build_profitability_snapshot(merchant_id, start_dt, end_dt)
+    least = snapshot.get("least_profitable_product") or {}
+    root_cause = snapshot.get("root_cause") or {}
 
     return {
         "data": {
-            "products": product_list,
-            "total_revenue": round(sum(p["revenue"] for p in product_list), 2),
-            "total_shipping": round(total_shipping, 2),
-            "total_ads": round(total_ads, 2),
-            "period": f"{from_date} to {to_date}",
+            "products": snapshot.get("products", []),
+            "least_profitable_product": least,
+            "root_cause": root_cause,
+            "summary": snapshot.get("summary", {}),
+            "period": snapshot.get("period"),
         },
-        "citations": citations[:30],
-        "summary": f"Profitability: {len(product_list)} products. " + (
-            f"Most unprofitable: {product_list[0]['product_name']} (margin {product_list[0]['margin_percent']}%)" if product_list else "No data"
+        "citations": snapshot.get("citations", []),
+        "summary": (
+            f"Profitability: {len(snapshot.get('products', []))} products. "
+            + (f"Most unprofitable: {least.get('product_name', 'Unknown')} (margin {least.get('margin_percent', 0)}%)" if least else "No data")
         ),
     }
 

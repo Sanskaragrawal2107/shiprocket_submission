@@ -169,7 +169,8 @@ def fetch_merchant_rows(
 ) -> list[dict[str, Any]]:
     query = get_supabase().table(table).select("*").eq("merchant_id", merchant_id)
     if date_column and from_date:
-        query = query.gte(date_column, from_date.isoformat())
+        date_value = from_date.date().isoformat() if isinstance(from_date, datetime) else from_date.isoformat()
+        query = query.gte(date_column, date_value)
     response = query.execute()
     return _rows(response)
 
