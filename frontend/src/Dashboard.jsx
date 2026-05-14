@@ -21,6 +21,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "./AuthContext";
+import OnboardingModal from "./components/OnboardingModal";
 import { tamboComponents } from "./tamboComponents";
 import { tamboTools } from "./tamboTools";
 
@@ -514,6 +515,7 @@ function DashboardInner() {
   const [lastSyncedAt, setLastSyncedAt] = useState(merchant?.last_synced_at || null);
   const [chatOpen, setChatOpen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(!merchant?.onboarded);
 
   /* Derived */
   const unreadCount = notifications.filter((n) => !n.is_read).length;
@@ -566,6 +568,10 @@ function DashboardInner() {
     fetchProfile();
   }, [fetchInsights, fetchNotifications, fetchProfile]);
 
+  useEffect(() => {
+    setShowOnboarding(!merchant?.onboarded);
+  }, [merchant]);
+
   /* Mark one notification read */
   const handleMarkRead = async (id) => {
     setNotifications((prev) =>
@@ -602,6 +608,16 @@ function DashboardInner() {
       console.error("Agent run failed:", err);
     } finally {
       setAgentRunning(false);
+    }
+  };
+
+  const handleOnboardingSave = async (values) => {
+    try {
+      await authFetch("/auth/me", { method: "PUT", body: { settings: values, onboarded: true } });
+      await authFetch("/auth/me");
+      setShowOnboarding(false);
+    } catch (err) {
+      console.error("Onboarding save failed:", err);
     }
   };
 
@@ -720,6 +736,7 @@ ${kpis ? JSON.stringify(kpis, null, 2) : "No live data available yet."}`,
 
   return (
     <div className="db-shell">
+      <OnboardingModal open={showOnboarding} initialSettings={merchant?.settings} onSave={handleOnboardingSave} onClose={() => setShowOnboarding(false)} />
       {/* ── TOP NAV ── */}
       <header className="db-nav">
         <div className="db-nav-left">

@@ -77,6 +77,8 @@ def merchant_public_profile(row: dict[str, Any]) -> dict[str, Any]:
         "email": sanitized.get("email"),
         "is_active": sanitized.get("is_active", True),
         "last_synced_at": sanitized.get("last_synced_at"),
+        "settings": sanitized.get("settings") or {},
+        "onboarded": bool(sanitized.get("onboarded", False)),
         "created_at": sanitized.get("created_at"),
         "updated_at": sanitized.get("updated_at"),
     }

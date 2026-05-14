@@ -21,6 +21,8 @@ create table if not exists public.merchants (
   meta_ads_account_id text,
   meta_ads_access_token text,
   is_active boolean default true,
+  settings jsonb,
+  onboarded boolean default false,
   last_synced_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

@@ -180,6 +180,34 @@ async def auth_me(current_merchant: dict[str, Any] = Depends(get_current_merchan
     return current_merchant
 
 
+@app.put("/auth/me")
+async def update_profile(payload: dict[str, Any], current_token: dict[str, Any] = Depends(get_current_merchant_token)) -> dict[str, Any]:
+    """Update merchant-level settings (onboarding, preferences, thresholds).
+
+    Accepts a JSON payload with optional `settings` (object) and `onboarded` (bool).
+    """
+    merchant_id = current_token["merchant_id"]
+    updates: dict[str, Any] = {}
+    if "settings" in payload:
+        updates["settings"] = payload["settings"]
+    if "onboarded" in payload:
+        updates["onboarded"] = bool(payload["onboarded"])
+
+    if not updates:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    try:
+        response = get_supabase().table("merchants").update(updates).eq("merchant_id", merchant_id).execute()
+        row = response.data[0] if getattr(response, "data", None) else None
+        if not row:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Update failed")
+        return merchant_public_profile(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Update failed: {exc}") from exc
+
+
 @app.get("/merchants")
 async def list_merchants(_: None = Depends(require_admin_api_key)) -> dict[str, Any]:
     response = get_supabase().table("merchants").select("*").order("created_at").execute()
