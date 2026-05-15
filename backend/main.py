@@ -60,6 +60,7 @@ from db import (
     mark_notification_read,
     merchant_public_profile,
     sanitize_merchant_row,
+    upsert_thresholds_from_settings,
     upsert_threshold_rows,
 )
 from schemas import LoginRequest, RegisterRequest, ThresholdUpdateRequest
@@ -201,6 +202,8 @@ async def update_profile(payload: dict[str, Any], current_token: dict[str, Any] 
         row = response.data[0] if getattr(response, "data", None) else None
         if not row:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Update failed")
+        if "settings" in updates:
+            upsert_thresholds_from_settings(merchant_id, updates["settings"])
         return merchant_public_profile(row)
     except HTTPException:
         raise

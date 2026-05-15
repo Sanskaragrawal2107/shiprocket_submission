@@ -110,6 +110,7 @@ def _calculate_facts(merchant_id: str) -> MerchantFacts:
     delivery_delay_days = (sum(delivery_days) / len(delivery_days)) if delivery_days else 0.0
 
     metrics = {
+        "total_orders": float(total_orders),
         "rto_rate": round((failed_deliveries / total_orders) * 100, 2) if total_orders else 0.0,
         "roas": round((total_revenue / total_ad_spend), 2) if total_ad_spend else 0.0,
         "settlement_gap_percent": round((unsettled_payments / total_payments) * 100, 2) if total_payments else 0.0,

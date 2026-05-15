@@ -11,12 +11,57 @@ from supabase_client import SupabaseClient, create_client
 
 
 DEFAULT_THRESHOLD_ROWS = [
+    {"metric": "total_orders", "threshold_value": 100, "operator": "less_than"},
     {"metric": "rto_rate", "threshold_value": 15, "operator": "greater_than"},
     {"metric": "roas", "threshold_value": 2.0, "operator": "less_than"},
     {"metric": "settlement_gap_percent", "threshold_value": 20, "operator": "greater_than"},
     {"metric": "payment_failure_rate", "threshold_value": 10, "operator": "greater_than"},
     {"metric": "delivery_delay_days", "threshold_value": 3, "operator": "greater_than"},
 ]
+
+
+def thresholds_from_settings(settings: dict[str, Any] | None) -> list[dict[str, Any]]:
+    settings = settings or {}
+    rows: list[dict[str, Any]] = []
+
+    if settings.get("total_orders_target") is not None:
+        rows.append(
+            {
+                "metric": "total_orders",
+                "threshold_value": float(settings["total_orders_target"]),
+                "operator": "less_than",
+            }
+        )
+
+    if settings.get("delivery_failure_threshold") is not None:
+        raw_threshold = float(settings["delivery_failure_threshold"])
+        threshold_value = raw_threshold * 100 if raw_threshold <= 1 else raw_threshold
+        rows.append(
+            {
+                "metric": "rto_rate",
+                "threshold_value": threshold_value,
+                "operator": "greater_than",
+            }
+        )
+
+    if settings.get("roas_target") is not None:
+        rows.append(
+            {
+                "metric": "roas",
+                "threshold_value": float(settings["roas_target"]),
+                "operator": "less_than",
+            }
+        )
+
+    return rows
+
+
+def upsert_thresholds_from_settings(merchant_id: str, settings: dict[str, Any] | None) -> list[dict[str, Any]]:
+    rows = [{"merchant_id": merchant_id, **row} for row in thresholds_from_settings(settings)]
+    if not rows:
+        return []
+    response = get_supabase().table("merchant_thresholds").upsert(rows, on_conflict="merchant_id,metric")
+    return _rows(response)
 
 
 @dataclass(slots=True)
