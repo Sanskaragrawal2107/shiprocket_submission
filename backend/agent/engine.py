@@ -90,8 +90,8 @@ def _calculate_facts(merchant_id: str) -> MerchantFacts:
         for item in payments
         if str(item.get("status", "")).lower() in FAILED_PAYMENT_STATUSES
     )
-    unsettled_payments = max(total_payments - settled_payments, 0)
-
+    payments_pending = max(total_payments - settled_payments, 0)
+    unsettled_payments = payments_pending
     delivery_days = []
     for item in deliveries:
         if str(item.get("status", "")).lower() not in DELIVERED_STATUSES:
@@ -190,6 +190,7 @@ def build_profitability_snapshot(
     )
 
     payments_pending = max(total_payments - settled_payments, 0)
+    unsettled_payments = payments_pending
     delivery_success_rate = round((delivered_deliveries / total_deliveries) * 100, 1) if total_deliveries else 0.0
     delivery_failure_rate = round((failed_deliveries / total_deliveries) * 100, 1) if total_deliveries else 0.0
     payment_gap_rate = round((payments_pending / total_payments) * 100, 1) if total_payments else 0.0
@@ -415,6 +416,36 @@ def _threshold_for_metric(metric: str) -> float:
     return 0.0
 
 
+def _save_anomaly_snapshot(
+    merchant_id: str,
+    metrics_checked: dict[str, Any],
+    thresholds: dict[str, dict[str, Any]],
+    anomalies: list[dict[str, Any]],
+    *,
+    llm_called: bool,
+    recommendations: list[dict[str, Any]] | None = None,
+    llm_raw_output: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "merchant_id": merchant_id,
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
+        "conditions_triggered": anomalies,
+        "data_snapshot": {
+            "metrics_checked": metrics_checked,
+            "thresholds": thresholds,
+            "anomalies": anomalies,
+            "llm_called": llm_called,
+        },
+        "llm_reasoning": "LLM response unavailable; saved deterministic anomaly snapshot." if not llm_called else None,
+        "recommendations": recommendations or [],
+        "estimated_saving": None,
+        "status": "anomalies_detected" if anomalies else "no_anomalies",
+    }
+    if llm_raw_output is not None:
+        payload["data_snapshot"]["llm_raw_output"] = llm_raw_output
+    return save_agent_insight(payload)
+
+
 async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
     merchant = get_merchant_context(merchant_id)
     thresholds = _threshold_map(get_threshold_rows(merchant_id))
@@ -427,18 +458,7 @@ async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
     }
 
     if not anomalies:
-        insight = save_agent_insight(
-            {
-                "merchant_id": merchant_id,
-                "triggered_at": datetime.now(timezone.utc).isoformat(),
-                "llm_called": False,
-                "status": "no_anomalies",
-                "metrics_checked": metrics_checked,
-                "thresholds": thresholds,
-                "anomalies": [],
-                "recommendations": [],
-            }
-        )
+        insight = _save_anomaly_snapshot(merchant_id, metrics_checked, thresholds, [], llm_called=False)
         return {
             "status": "no_anomalies",
             "merchant_id": merchant_id,
@@ -450,18 +470,7 @@ async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         logger.warning("OPENAI_API_KEY missing; saving anomaly state without LLM response for %s", merchant_id)
-        insight = save_agent_insight(
-            {
-                "merchant_id": merchant_id,
-                "triggered_at": datetime.now(timezone.utc).isoformat(),
-                "llm_called": False,
-                "status": "anomalies_detected",
-                "metrics_checked": metrics_checked,
-                "thresholds": thresholds,
-                "anomalies": anomalies,
-                "recommendations": [],
-            }
-        )
+        insight = _save_anomaly_snapshot(merchant_id, metrics_checked, thresholds, anomalies, llm_called=False)
         return {
             "status": "anomalies_detected",
             "merchant_id": merchant_id,
@@ -472,38 +481,48 @@ async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
             "insight": insight,
         }
 
-    client = OpenAI(api_key=api_key)
     prompt = _build_prompt(facts.metrics, facts.raw_counts, anomalies)
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a D2C business analyst. Use ONLY the data provided below. Do not assume, invent, or hallucinate any values. If a value needed for savings calculation is not in the provided data, return estimated_saving as null. Every recommendation must cite its source metric and table.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.2,
-        response_format={"type": "json_object"},
-    )
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a D2C business analyst. Use ONLY the data provided below. Do not assume, invent, or hallucinate any values. If a value needed for savings calculation is not in the provided data, return estimated_saving as null. Every recommendation must cite its source metric and table.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
 
-    raw_text = response.choices[0].message.content or "{}"
-    payload = json.loads(raw_text)
-    recommendations = _validate_recommendations(payload, facts, thresholds)
-
-    insight = save_agent_insight(
-        {
-            "merchant_id": merchant_id,
-            "triggered_at": datetime.now(timezone.utc).isoformat(),
-            "llm_called": True,
+        raw_text = response.choices[0].message.content or "{}"
+        payload = json.loads(raw_text)
+        recommendations = _validate_recommendations(payload, facts, thresholds)
+    except Exception as exc:
+        logger.warning("LLM call failed for %s; saving anomaly state without model output: %s", merchant_id, exc)
+        insight = _save_anomaly_snapshot(merchant_id, metrics_checked, thresholds, anomalies, llm_called=False)
+        return {
             "status": "anomalies_detected",
+            "merchant_id": merchant_id,
+            "llm_called": False,
             "metrics_checked": metrics_checked,
             "thresholds": thresholds,
             "anomalies": anomalies,
-            "llm_raw_output": payload,
-            "recommendations": recommendations,
+            "recommendations": [],
+            "insight": insight,
         }
+
+    insight = _save_anomaly_snapshot(
+        merchant_id,
+        metrics_checked,
+        thresholds,
+        anomalies,
+        llm_called=True,
+        recommendations=recommendations,
+        llm_raw_output=payload,
     )
 
     for recommendation in recommendations:

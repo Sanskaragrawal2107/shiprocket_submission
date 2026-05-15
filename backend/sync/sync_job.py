@@ -13,6 +13,7 @@ from connectors.meta_ads import MetaAdsConnector
 from connectors.razorpay import RazorpayConnector
 from connectors.shiprocket import ShiprocketConnector
 from connectors.shopify import ShopifyConnector
+from agent.engine import run_agent_for_merchant
 from db import get_merchant_context, update_last_synced_at
 from supabase_client import SupabaseClient, create_client
 
@@ -91,6 +92,11 @@ async def run_sync(merchant_id: str) -> dict:
 
     if not errors:
         update_last_synced_at(merchant_id, sync_end)
+        try:
+            await run_agent_for_merchant(merchant_id)
+        except Exception as exc:
+            errors.append({"connector": "agent", "error": str(exc)})
+            results["agent"] = {"status": "error", "error": str(exc)}
 
     print(f"[Sync] Completed for {merchant_id}: {results}")
     return {

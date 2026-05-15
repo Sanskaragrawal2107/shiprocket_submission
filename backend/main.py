@@ -242,7 +242,9 @@ async def sync_merchant(
 ) -> dict[str, Any]:
     _merchant_id_matches(current_token, merchant_id)
     try:
-        return await run_sync(merchant_id)
+        sync_result = await run_sync(merchant_id)
+        agent_result = await run_agent_for_merchant(merchant_id)
+        return {**sync_result, "agent_result": agent_result}
     except HTTPException:
         raise
     except Exception as exc:
@@ -318,7 +320,9 @@ async def admin_merchants(_: None = Depends(require_admin_api_key)) -> dict[str,
 
 @app.post("/admin/sync/{merchant_id}")
 async def admin_sync(merchant_id: str, _: None = Depends(require_admin_api_key)) -> dict[str, Any]:
-    return await run_sync(merchant_id)
+    sync_result = await run_sync(merchant_id)
+    agent_result = await run_agent_for_merchant(merchant_id)
+    return {**sync_result, "agent_result": agent_result}
 
 
 @app.post("/admin/agent/run/{merchant_id}")
