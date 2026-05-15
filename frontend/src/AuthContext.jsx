@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const AUTH_TOKEN_KEY = "d2c_ai_employee_token";
 const MERCHANT_KEY = "d2c_ai_employee_merchant";
+const MERCHANT_PREFS_KEY = "d2c_ai_employee_merchant_prefs";
 
 const AuthContext = createContext(null);
 
@@ -33,10 +34,62 @@ function readStoredAuth() {
     const token = localStorage.getItem(AUTH_TOKEN_KEY) || "";
     const merchantRaw = localStorage.getItem(MERCHANT_KEY);
     const merchant = merchantRaw ? JSON.parse(merchantRaw) : null;
+    const prefsRaw = localStorage.getItem(MERCHANT_PREFS_KEY);
+    const prefs = prefsRaw ? JSON.parse(prefsRaw) : {};
+    if (merchant?.merchant_id && prefs[merchant.merchant_id]) {
+      return {
+        token,
+        merchant: {
+          ...merchant,
+          ...prefs[merchant.merchant_id],
+          settings: {
+            ...(merchant.settings || {}),
+            ...(prefs[merchant.merchant_id].settings || {}),
+          },
+        },
+      };
+    }
     return { token, merchant };
   } catch {
     return { token: "", merchant: null };
   }
+}
+
+function readMerchantPrefs() {
+  try {
+    const raw = localStorage.getItem(MERCHANT_PREFS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistMerchantPrefs(merchantId, prefs) {
+  if (!merchantId) return;
+  const allPrefs = readMerchantPrefs();
+  allPrefs[merchantId] = {
+    ...(allPrefs[merchantId] || {}),
+    ...prefs,
+    settings: {
+      ...((allPrefs[merchantId] || {}).settings || {}),
+      ...(prefs.settings || {}),
+    },
+  };
+  localStorage.setItem(MERCHANT_PREFS_KEY, JSON.stringify(allPrefs));
+}
+
+function mergeMerchantPrefs(merchant) {
+  if (!merchant?.merchant_id) return merchant;
+  const prefs = readMerchantPrefs()[merchant.merchant_id];
+  if (!prefs) return merchant;
+  return {
+    ...merchant,
+    ...prefs,
+    settings: {
+      ...(merchant.settings || {}),
+      ...(prefs.settings || {}),
+    },
+  };
 }
 
 function persistAuth(token, merchant) {
@@ -74,9 +127,10 @@ export function AuthProvider({ children }) {
         const profile = await requestJson("/auth/me", { token: storedToken });
         if (!active) return;
         setToken(storedToken);
-        setMerchant(profile);
-        setUser(profile);
-        persistAuth(storedToken, profile);
+        const mergedProfile = mergeMerchantPrefs(profile);
+        setMerchant(mergedProfile);
+        setUser(mergedProfile);
+        persistAuth(storedToken, mergedProfile);
       } catch {
         if (!active) return;
         setToken("");
@@ -104,11 +158,11 @@ export function AuthProvider({ children }) {
 
     const nextToken = response.access_token || "";
     const profile = nextToken ? await requestJson("/auth/me", { token: nextToken }) : null;
-    const nextMerchant = profile || {
+    const nextMerchant = mergeMerchantPrefs(profile || {
       merchant_id: response.merchant_id,
       email: response.email,
       name: response.name,
-    };
+    });
 
     setToken(nextToken);
     setMerchant(nextMerchant);
@@ -152,10 +206,20 @@ export function AuthProvider({ children }) {
     refreshSession: async () => {
       if (!token) return null;
       const profile = await requestJson("/auth/me", { token });
-      setMerchant(profile);
-      setUser(profile);
-      persistAuth(token, profile);
-      return profile;
+      const mergedProfile = mergeMerchantPrefs(profile);
+      setMerchant(mergedProfile);
+      setUser(mergedProfile);
+      persistAuth(token, mergedProfile);
+      return mergedProfile;
+    },
+    saveMerchantPreferences: (merchantId, prefs) => {
+      persistMerchantPrefs(merchantId, prefs);
+      setMerchant((current) => (current?.merchant_id === merchantId ? mergeMerchantPrefs(current) : current));
+      setUser((current) => (current?.merchant_id === merchantId ? mergeMerchantPrefs(current) : current));
+      if (token && merchantId && merchantId === stored.merchant?.merchant_id) {
+        const merged = mergeMerchantPrefs(stored.merchant || {});
+        persistAuth(token, merged);
+      }
     },
   };
 

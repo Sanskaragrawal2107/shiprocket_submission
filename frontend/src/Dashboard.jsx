@@ -503,7 +503,7 @@ function ChatPanel({ merchantId, onClose }) {
    ══════════════════════════════════════════════════════════ */
 
 function DashboardInner() {
-  const { merchant, logout, authFetch, refreshSession } = useAuth();
+  const { merchant, logout, authFetch, refreshSession, saveMerchantPreferences } = useAuth();
   const merchantId = merchant?.merchant_id || "";
   const isFirstTimeOnboarding = !merchant?.onboarded;
 
@@ -614,6 +614,7 @@ function DashboardInner() {
 
   const handleOnboardingSave = async (values) => {
     try {
+      saveMerchantPreferences(merchantId, { onboarded: true, settings: values });
       await authFetch("/auth/me", { method: "PUT", body: { settings: values, onboarded: true } });
       await refreshSession();
       setShowOnboarding(false);
@@ -629,6 +630,7 @@ function DashboardInner() {
     }
 
     try {
+      saveMerchantPreferences(merchantId, { onboarded: true, settings: defaults });
       await authFetch("/auth/me", { method: "PUT", body: { settings: defaults, onboarded: true } });
       await refreshSession();
     } catch (err) {
