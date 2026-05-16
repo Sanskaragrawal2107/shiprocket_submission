@@ -180,9 +180,9 @@ Right now the sync runs sequentially and upserts in batches of 50, scheduled via
 ## 8. Development Logs
 
 **Hours spent:** ~18 hours over 6 days.
-- **Day 1-2:** Schema design, Supabase auth/RLS, Shopify and Razorpay connectors — essentially all the backend groundwork.
-- **Day 3-4:** The actual agent engine — two-phase scan, threshold math, anti-hallucination validation.
-- **Day 5-6:** Frontend and FastMCP tools.
+- **Day 1-2:** Schema design, Supabase auth/RLS, Shopify and Razorpay connectors, security middleware (API key), pg_cron warm-up jobs, and Supabase edge functions — essentially all the backend groundwork.
+- **Day 3-4:** Merchant auth system, CORS hardening, FastMCP server with 8 tools, the Tambo AI chat layer, real dashboard UI, and agent fixes (anti-hallucination validation, KPI context passing).
+- **Day 5-6:** Merchant onboarding flow, threshold sync into agent engine, profitability analysis, frontend polish, Netlify deployment, and final README.
 
 **A Note on AI Tools:**
 I used Claude heavily for boilerplate — FastAPI route signatures, Pydantic schemas, React components, Supabase SQL policies. It's fast at that stuff.
