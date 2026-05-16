@@ -526,12 +526,17 @@ async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
     )
 
     for recommendation in recommendations:
+        # Sanitize title and message to ensure they're never None (NOT NULL constraint)
+        title = recommendation.get("title") or "Anomaly detected"
+        action = recommendation.get("action") or "Review recommended actions"
+        message = str(action)[:200]
+        
         create_notification(
             {
                 "merchant_id": merchant_id,
                 "type": "anomaly_detected",
-                "title": recommendation.get("title", "Anomaly detected"),
-                "message": str(recommendation.get("action", ""))[:200],
+                "title": title,
+                "message": message,
                 "is_read": False,
             }
         )

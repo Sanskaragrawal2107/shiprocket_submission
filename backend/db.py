@@ -256,7 +256,20 @@ def list_agent_insights(merchant_id: str, limit: int = 20) -> list[dict[str, Any
 
 
 def create_notification(payload: dict[str, Any]) -> dict[str, Any]:
-    response = get_supabase().table("notifications").insert(payload)
+    # Sanitize payload to ensure NOT NULL constraints are met
+    sanitized = dict(payload)
+    
+    # Ensure required text fields are never None
+    sanitized["merchant_id"] = sanitized.get("merchant_id") or ""
+    sanitized["type"] = sanitized.get("type") or "notification"
+    sanitized["title"] = (sanitized.get("title") or "").strip() or "Notification"
+    sanitized["message"] = (sanitized.get("message") or "").strip() or "No details"
+    
+    # Ensure is_read is a boolean (default False)
+    if "is_read" not in sanitized:
+        sanitized["is_read"] = False
+    
+    response = get_supabase().table("notifications").insert(sanitized)
     row = _first(response)
     if not row:
         raise RuntimeError("Failed to save notification")
