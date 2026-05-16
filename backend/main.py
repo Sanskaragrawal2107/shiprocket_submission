@@ -349,7 +349,7 @@ async def connectors_status(_: None = Depends(require_admin_api_key)) -> dict[st
     statuses: dict[str, Any] = {}
     for name, connector in connectors.items():
         try:
-            healthy = connector.health_check()
+            healthy = await connector.health_check()
             statuses[name] = {"status": "healthy" if healthy else "unhealthy", "merchant_id": merchant_id}
         except Exception as exc:
             statuses[name] = {"status": "error", "error": str(exc), "merchant_id": merchant_id}

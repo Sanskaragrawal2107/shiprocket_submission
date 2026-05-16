@@ -77,7 +77,7 @@ async def run_sync(merchant_id: str) -> dict:
     for connector_name, (connector_cls, table_name) in connectors.items():
         try:
             connector = connector_cls(merchant_id, credentials)
-            rows = connector.fetch_orders(from_date, to_date)
+            rows = await connector.fetch_orders(from_date, to_date)
             count = _upsert_batch(supabase, table_name, rows)
             results[connector_name] = {
                 "status": "ok",
@@ -92,11 +92,7 @@ async def run_sync(merchant_id: str) -> dict:
 
     if not errors:
         update_last_synced_at(merchant_id, sync_end)
-        try:
-            await run_agent_for_merchant(merchant_id)
-        except Exception as exc:
-            errors.append({"connector": "agent", "error": str(exc)})
-            results["agent"] = {"status": "error", "error": str(exc)}
+
 
     print(f"[Sync] Completed for {merchant_id}: {results}")
     return {

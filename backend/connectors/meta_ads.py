@@ -85,16 +85,16 @@ class MetaAdsConnector(BaseConnector):
 
         return records
 
-    def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch mock campaign performance data."""
         data = self._generate_campaign_data(from_date, to_date)
         print(f"[Meta Ads Mock] Generated {len(data)} campaign records")
         return data
 
-    def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
         """No concept of returns in ads — return empty."""
         return []
 
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Mock connector is always healthy."""
         return True

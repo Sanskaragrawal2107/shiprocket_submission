@@ -3,6 +3,7 @@ Razorpay Connector — REAL API integration.
 Uses the official razorpay Python SDK to fetch payment/order data.
 """
 
+import asyncio
 from datetime import date, datetime, timezone
 from .base import BaseConnector
 
@@ -23,7 +24,7 @@ class RazorpayConnector(BaseConnector):
         if razorpay and self.key_id and self.key_secret:
             self.client = razorpay.Client(auth=(self.key_id, self.key_secret))
 
-    def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
         """
         Fetch Razorpay orders and map to payments table schema.
         Uses client.order.all() with timestamp-based filtering.
@@ -42,7 +43,7 @@ class RazorpayConnector(BaseConnector):
             skip = 0
             count = 100
             while True:
-                orders = self.client.order.all({
+                orders = await asyncio.to_thread(self.client.order.all, {
                     "from": from_ts,
                     "to": to_ts,
                     "count": count,
@@ -82,20 +83,20 @@ class RazorpayConnector(BaseConnector):
         print(f"[Razorpay] Fetched {len(all_payments)} payment records")
         return all_payments
 
-    def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch refunded payments."""
-        all_payments = self.fetch_orders(from_date, to_date)
+        all_payments = await self.fetch_orders(from_date, to_date)
         refunds = [p for p in all_payments if p.get("status") == "refunded"]
         print(f"[Razorpay] Found {len(refunds)} refunds")
         return refunds
 
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Check if Razorpay API is reachable."""
         if not self.client:
             return False
         try:
             # Fetch 1 order to test connectivity
-            self.client.order.all({"count": 1})
+            await asyncio.to_thread(self.client.order.all, {"count": 1})
             return True
         except Exception:
             return False

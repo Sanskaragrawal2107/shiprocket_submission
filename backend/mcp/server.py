@@ -146,6 +146,7 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
     ).gte("dispatch_date", from_date).lte("dispatch_date", to_date).execute()
 
     deliveries = result.data or []
+    citations = []
 
     # Group by courier + zone
     stats = {}
@@ -187,7 +188,7 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
 
     rows.sort(key=lambda x: x["success_rate"])
 
-    citations = []
+
     for row in rows[:5]:
         citations.append({
             "source": "shiprocket",

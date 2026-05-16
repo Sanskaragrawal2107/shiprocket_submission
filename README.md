@@ -1,230 +1,174 @@
 # D2C AI Employee
 
-> AI-powered business intelligence assistant for D2C brands.  
-> One place to ask anything about your Shopify orders, Shiprocket deliveries, Razorpay payments, and Meta Ads — with every number cited back to its source row.
+A centralized AI employee for D2C brands. It continuously monitors data across Shopify (Orders), Razorpay (Payments), Shiprocket (Logistics), and Meta Ads (Marketing) to detect anomalies and find hidden margin leaks.
+
+Instead of running on "vibes" and spending hours stitching Excel sheets, founders get an autonomous agent that flags issues like high RTO rates in specific courier zones or uncollected payment gaps, complete with row-level data citations.
 
 ---
 
-## Architecture
+## 1. Architecture & Design
 
-```
-┌──────────────┐    ┌───────────────┐    ┌───────────────┐
-│  React + Tambo│◄──►│  FastAPI       │◄──►│  Supabase     │
-│  (Chat + UI)  │    │  (API + MCP)   │    │  (PostgreSQL)  │
-└──────────────┘    └───────────────┘    └───────────────┘
-                          │                      │
-                    ┌─────┴─────┐          ┌─────┴─────┐
-                    │  Connectors│          │  pg_cron   │
-                    ├───────────┤          │  pg_net    │
-                    │ Shopify    │          └───────────┘
-                    │ Razorpay   │
-                    │ Shiprocket │
-                    │ Meta Ads   │
-                    └───────────┘
-```
+I wanted a system that was robust enough to handle the core D2C data loop, but lightweight enough to run autonomously without blowing up LLM costs.
 
-## Tech Stack
+```mermaid
+graph TD
+    subgraph SaaS Sources
+        S[Shopify API] 
+        R[Razorpay API]
+        SR[Shiprocket Mock]
+        M[Meta Ads Mock]
+    end
 
-| Layer     | Technology                        |
-|-----------|-----------------------------------|
-| Frontend  | React + Vite + Tambo AI + Recharts |
-| Backend   | FastAPI (Python)                  |
-| Database  | Supabase (PostgreSQL)             |
-| MCP       | FastMCP (Python)                  |
-| Cron      | pg_cron + pg_net (Supabase)       |
+    subgraph Backend - FastAPI
+        C[Connectors]
+        S --> C
+        R --> C
+        SR --> C
+        M --> C
+        
+        SJ[Sync Job - Batched Upserts]
+        C --> SJ
+        
+        AE[Agent Engine]
+        SJ --> AE
+        
+        MCP[FastMCP Server]
+    end
 
-## Project Structure
+    subgraph Database - Supabase
+        DB[(PostgreSQL)]
+        SJ -->|Denormalized Rows| DB
+        DB -->|Metric Scan| AE
+        DB -->|Tool Queries| MCP
+    end
 
-```
-shiprocket/
-├── backend/
-│   ├── connectors/
-│   │   ├── base.py            # BaseConnector ABC
-│   │   ├── shopify.py         # Shopify Orders API
-│   │   ├── razorpay.py        # Razorpay Payments API
-│   │   ├── shiprocket.py      # Shiprocket Shipments (mock)
-│   │   └── meta_ads.py        # Meta Ads API (mock)
-│   ├── sync/
-│   │   └── sync_job.py        # Orchestrates all connectors
-│   ├── agent/
-│   │   ├── conditions.py      # Anomaly detection rules
-│   │   ├── analyzer.py        # Scans data & detects anomalies
-│   │   └── llm_recommender.py # GPT-powered recommendations
-│   ├── mcp/
-│   │   └── server.py          # 8 MCP tools with citations
-│   ├── supabase_client.py     # Lightweight httpx Supabase client
-│   ├── main.py                # FastAPI app entry point
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── RevenueCard.jsx
-│   │   │   ├── OrdersChart.jsx
-│   │   │   ├── DeliveryTracker.jsx
-│   │   │   ├── PaymentLedger.jsx
-│   │   │   ├── AdsDashboard.jsx
-│   │   │   ├── InsightsList.jsx
-│   │   │   ├── CrossChannelChart.jsx
-│   │   │   └── HealthScore.jsx
-│   │   ├── tamboComponents.js  # Component registry
-│   │   ├── tamboTools.js       # Tool definitions
-│   │   ├── App.jsx             # Main app with TamboProvider
-│   │   ├── main.jsx            # Entry point
-│   │   └── index.css           # Design system
-│   ├── .env.example
-│   ├── vite.config.js
-│   └── package.json
-└── README.md
+    subgraph Frontend
+        UI[React + Tambo AI]
+        UI <-->|Tool Execution| MCP
+        AE -->|Alerts| UI
+    end
+
+    %% Agent Flow
+    subgraph Autonomous Loop
+        direction TB
+        SCAN[Python Metric Scan] -->|Threshold Breached?| LLM[GPT-4o-mini]
+        LLM -->|Validate Output| SAVE[Store in DB]
+    end
+    AE -.-> Autonomous Loop
 ```
 
-## Quick Start
+---
 
-### 1. Backend
+## 2. Connectors: Which 3 and Why?
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
-# Fill in .env with your keys
-uvicorn main:app --host 0.0.0.0 --port 8000
+The requirement asked for at least 3 connectors. I chose 4 because D2C margins are lost in the gaps *between* systems. 
+
+**The Real Integrations:**
+1. **Shopify:** The absolute source of truth for what was sold. (Real REST API)
+2. **Razorpay:** The source of truth for what was actually collected. (Real Python SDK)
+
+**The Mocked Integrations:**
+3. **Shiprocket (Logistics):** Mocked via deterministic generation. Getting a real Shiprocket API key requires a merchant-level OAuth approval process which I don't have access to for this demo.
+4. **Meta Ads (Marketing):** Mocked deterministically. Requires a Meta App Review for the Marketing API.
+
+*Why these specific four?* 
+The combination of these four dimensions is how you calculate true profitability. If Shopify says an order is placed, but Razorpay says the payment failed, that's a leak. If the order is paid, but Shiprocket RTOs (Returns to Origin) it, you lose the shipping cost. If Meta Ads acquired the customer at an unsustainable CAC, the whole loop is unprofitable. 
+
+---
+
+## 3. The Schema: Why this shape?
+
+```mermaid
+erDiagram
+    MERCHANTS ||--o{ ORDERS : owns
+    MERCHANTS ||--o{ PAYMENTS : owns
+    MERCHANTS ||--o{ DELIVERIES : owns
+    MERCHANTS ||--o{ META_ADS : owns
+    
+    ORDERS {
+        string merchant_id
+        string order_ref
+        float revenue
+        string financial_status
+        string source_row_ref PK "Citation anchor"
+    }
+    
+    PAYMENTS {
+        string order_ref FK "Links to Shopify order"
+        float amount
+        string status
+    }
 ```
 
-### 2. Frontend
+I used flat, denormalized tables for each domain (`orders`, `payments`, `deliveries`, `meta_ads`). 
+- **`source_row_ref`:** This is the most important column in the database. It acts as an idempotent conflict key for upserts, and more importantly, it is the **citation anchor**. 
+- **Join-ability:** The `orders` table is linked to `payments` and `deliveries` via the `order_ref`. This allows the agent to compute exact settlement gaps.
+- **Tenant Isolation:** Every table has a `merchant_id` tied to strict Row Level Security (RLS) policies in PostgreSQL.
 
-```bash
-cd frontend
-npm install
-cp .env.example .env
-# Set VITE_TAMBO_API_KEY in .env
-npm run dev
-```
+---
 
-### 3. Environment Variables
+## 4. The Chat Layer & Citations
 
-**Backend (`.env`)**
-```
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
-SHOPIFY_STORE=your-store.myshopify.com
-SHOPIFY_TOKEN=shpat_xxx
-RAZORPAY_KEY_ID=rzp_xxx
-RAZORPAY_KEY_SECRET=xxx
-OPENAI_API_KEY=sk-xxx
-```
+The chat interface is powered by Tambo AI, which calls into my FastMCP server exposing 8 dedicated tools.
 
-**Frontend (`.env`)**
-```
-VITE_TAMBO_API_KEY=your-tambo-api-key
-VITE_API_URL=http://localhost:8000
-```
+**How Citations Work:**
+Whenever a tool runs (like `get_delivery_stats`), it doesn't just return an aggregate number. It returns the data payload alongside a `citations[]` array mapping every aggregated stat back to its specific `source_row_ref`. 
 
-## API Endpoints
+When the LLM formulates its response, it has the explicit mapping in its context window. Furthermore, in the agent layer, I built a `_validate_recommendations` function. If the LLM tries to hallucinate a metric value that doesn't exactly match the DB's computed value, the recommendation is silently dropped. 
 
-| Method | Path                    | Description                   |
-|--------|-------------------------|-------------------------------|
-| GET    | `/health`               | Health check                  |
-| GET    | `/health/connectors`    | Connector status              |
-| POST   | `/sync/{merchant_id}`   | Trigger full data sync        |
-| POST   | `/agent/run/{merchant_id}` | Run AI analysis agent      |
-| GET    | `/insights/{merchant_id}` | Get latest insights          |
+---
 
-## MCP Tools
+## 5. The Agent: What it does & Why
 
-The MCP server exposes 8 tools:
+The agent is an **autonomous profitability drain detector**. It watches 6 core metrics (like RTO rate > 15%, or ROAS < 2.0).
 
-| Tool                     | Description                                         |
-|--------------------------|-----------------------------------------------------|
-| `get_revenue_summary`    | Total revenue, order count, AOV with citations       |
-| `get_orders_by_status`   | Order distribution by status                         |
-| `get_delivery_breakdown` | Delivery performance: RTO, in-transit, delivered     |
-| `get_payment_status`     | Payment success rate, captured vs refunded           |
-| `get_ad_performance`     | Meta Ads: ROAS, spend, clicks, CTR by campaign       |
-| `get_cross_channel_data` | Revenue × Ad Spend × Orders × Deliveries over time  |
-| `get_business_health`    | Overall health score with category breakdown         |
-| `get_latest_insights`    | AI agent-generated anomaly alerts & recommendations  |
+**The Two-Phase Architecture:**
+I intentionally avoided feeding every row to an LLM. 
+1. **Phase 1 (Python Scan):** A fast, O(1) SQL aggregation runs to compute the 6 metrics against the merchant's thresholds. 
+2. **Phase 2 (LLM Validation):** *Only* if a threshold is breached, the LLM is called. It is fed the broken metrics and asked to formulate a plain-English recommendation (e.g., "Shift BlueDart Zone 5-6 orders to Delhivery to save ₹42,000/mo").
 
-Every tool returns a `citations[]` array mapping each number to its source row.
+*Why this approach?* Because RTO rate and ROAS degradation are the silent killers of Indian D2C brands. The two-phase approach means this can scale to 10,000 merchants without racking up a massive OpenAI bill on merchants who have healthy metrics.
 
-## Generative UI Components
+---
 
-The frontend registers 8 components with Tambo:
+## 6. Scale: 1 to 10,000 Merchants
 
-| Component          | Triggered by                              |
-|--------------------|--------------------------------------------|
-| `RevenueCard`      | Revenue, sales, GMV queries                |
-| `OrdersChart`      | Order counts, status breakdowns            |
-| `DeliveryTracker`  | Shipping, delivery, RTO queries            |
-| `PaymentLedger`    | Payment status, refund queries             |
-| `AdsDashboard`     | ROAS, ad performance, marketing spend      |
-| `InsightsList`     | Alerts, anomalies, recommendations         |
-| `CrossChannelChart`| Cross-platform trend comparisons           |
-| `HealthScore`      | Business health, overall performance       |
+Currently, the sync process runs sequentially and upserts in batches of 50. It's scheduled via `pg_cron` in Supabase.
 
-## pg_cron Setup (Supabase)
+**What breaks at 10,000 merchants?**
+1. **Sync Concurrency:** Sequential HTTP syncs will completely stall. Shopify rate limits to 2 req/s. 
+   *How to absorb it:* I'd replace the `pg_cron` HTTP calls with a proper message queue (like Celery + Redis or BullMQ) to distribute sync jobs across a pool of workers with tenant-aware rate limiters.
+2. **DB Scans:** With 10,000 merchants generating hundreds of orders a day, the `orders` table will hit millions of rows. 
+   *How to absorb it:* I would need to add composite indexes `(merchant_id, order_date DESC)` to prevent full table scans during the agent's metric aggregation.
+3. **Database Connections:** 10,000 concurrent sync jobs will exhaust Supabase's direct connection pool limit. 
+   *How to absorb it:* I am currently using httpx for Supabase interaction, so we are bypassing the TCP connection limit by using their REST API, which scales much better for this specific bottleneck.
 
-Run this SQL in your Supabase SQL editor to set up automated syncing:
+---
 
-```sql
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+## 7. Eval: Where does it break today?
 
--- Sync every 6 hours
-SELECT cron.schedule(
-  'sync-merchant-001',
-  '0 */6 * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://your-backend-url.com/sync/merchant_001',
-    headers := '{"Content-Type": "application/json"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
+- **Real-time Syncing:** It currently relies on pulling data. If a merchant has 10,000 orders, the pagination works but blocks the event loop for a while. Moving to Webhooks (Shopify `orders/create`) would be vastly superior.
+- **Missing API Keys:** If a merchant enters invalid credentials, the sync fails silently rather than alerting the user in the UI.
+- **ROAS Calculation:** The mock Meta Ads ROAS assumes a proportional attribution model. In reality, tracking exact ROAS requires complex UTM mapping or a Conversions API integration which isn't present here.
 
--- Run agent analysis every 8 hours  
-SELECT cron.schedule(
-  'agent-merchant-001',
-  '0 */8 * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://your-backend-url.com/agent/run/merchant_001',
-    headers := '{"Content-Type": "application/json"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
+---
 
--- Check running jobs
-SELECT * FROM cron.job;
+## 8. Development Logs
 
--- View job history
-SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
-```
+**Hours spent:** ~35 hours over the course of roughly 6 days.
+- **Day 1-2:** Schema design, Supabase auth/RLS, and building the real Shopify/Razorpay connectors.
+- **Day 3-4:** Agent engine architecture (the two-phase scan), threshold math, and the LLM anti-hallucination validation layer.
+- **Day 5-6:** FastMCP tools, Tambo frontend integration, debugging async loops, and documentation.
 
-## Database Tables
+**A Note on AI Tools:**
+I used AI (Claude) heavily for boilerplate generation. It wrote almost all of the FastAPI route signatures, Pydantic schemas, React UI components, and the Supabase SQL policies based on my prompts. 
+However, the core architectural decisions—the `source_row_ref` citation design, the two-phase agent logic, the anti-hallucination validation, and the connector normalization patterns—were designed and implemented by me.
 
-| Table                | Purpose                             |
-|----------------------|-------------------------------------|
-| `unified_orders`     | Shopify orders                      |
-| `unified_payments`   | Razorpay payments                   |
-| `unified_shipments`  | Shiprocket shipments                |
-| `unified_ad_metrics` | Meta Ads campaign data              |
-| `agent_insights`     | AI-detected anomalies & actions     |
+---
 
-## Design System
+## 9. What I'd do with another week
 
-The frontend uses a premium dark theme with:
-- **Glassmorphism** effects with backdrop blur
-- **Gradient accents** (indigo → purple)
-- **Neon status indicators** with glow animations
-- **Inter + JetBrains Mono** typography
-- **Responsive layout** (sidebar collapses on mobile)
-- **Micro-animations** for message and component entrance
-
-## License
-
-Private — Internal use only.
+1. Replace the Shiprocket mock with an actual live integration (requires setting up the OAuth app).
+2. Wire up a proper Redis queue for the sync jobs so they run in the background instead of blocking HTTP requests.
+3. Hook the MCP server directly into the Tambo chat interface (currently the frontend relies primarily on the FastAPI routes).
+4. Build inline citation chips in the React UI so users can click a number and see the exact JSON row from the database that generated it. 

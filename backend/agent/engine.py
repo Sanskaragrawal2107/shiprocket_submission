@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from db import (
     DEFAULT_THRESHOLD_ROWS,
@@ -484,8 +484,8 @@ async def run_agent_for_merchant(merchant_id: str) -> dict[str, Any]:
     prompt = _build_prompt(facts.metrics, facts.raw_counts, anomalies)
 
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
+        client = AsyncOpenAI(api_key=api_key)
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {

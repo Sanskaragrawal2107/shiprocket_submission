@@ -25,7 +25,7 @@ class ShopifyConnector(BaseConnector):
             "Content-Type": "application/json",
         }
 
-    def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
         """
         GET /admin/api/2024-01/orders.json
         Returns normalized order dicts mapped to our 'orders' table schema.
@@ -45,9 +45,9 @@ class ShopifyConnector(BaseConnector):
         }
 
         try:
-            with httpx.Client(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=30) as client:
                 while url:
-                    resp = client.get(url, headers=self._headers(), params=params)
+                    resp = await client.get(url, headers=self._headers(), params=params)
                     resp.raise_for_status()
                     data = resp.json()
                     orders = data.get("orders", [])
@@ -90,20 +90,20 @@ class ShopifyConnector(BaseConnector):
         print(f"[Shopify] Fetched {len(all_orders)} order line items")
         return all_orders
 
-    def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch orders with fulfillment_status = 'restocked' (returns)."""
-        all_orders = self.fetch_orders(from_date, to_date)
+        all_orders = await self.fetch_orders(from_date, to_date)
         returns = [o for o in all_orders if o.get("fulfillment_status") == "restocked"]
         print(f"[Shopify] Found {len(returns)} returns")
         return returns
 
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Check if Shopify API is reachable."""
         if not self.store_url or not self.access_token:
             return False
         try:
-            with httpx.Client(timeout=10) as client:
-                resp = client.get(
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
                     f"{self.base_url}/shop.json",
                     headers=self._headers(),
                 )

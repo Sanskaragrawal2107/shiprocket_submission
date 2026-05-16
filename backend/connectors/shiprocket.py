@@ -128,19 +128,19 @@ class ShiprocketConnector(BaseConnector):
 
         return deliveries
 
-    def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch mock delivery data (mapped as 'orders' from shiprocket perspective)."""
         deliveries = self._generate_deliveries(from_date, to_date)
         print(f"[Shiprocket Mock] Generated {len(deliveries)} delivery records")
         return deliveries
 
-    def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch returned/failed deliveries."""
         all_deliveries = self._generate_deliveries(from_date, to_date)
         returns = [d for d in all_deliveries if d["status"] in ("returned", "failed")]
         print(f"[Shiprocket Mock] Found {len(returns)} returns/failures")
         return returns
 
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Mock connector is always healthy."""
         return True

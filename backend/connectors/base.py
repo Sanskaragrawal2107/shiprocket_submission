@@ -17,16 +17,16 @@ class BaseConnector(ABC):
         self.credentials = credentials or {}
 
     @abstractmethod
-    def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_orders(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch orders/transactions for the given date range."""
         pass
 
     @abstractmethod
-    def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
+    async def fetch_returns(self, from_date: date, to_date: date) -> list[dict]:
         """Fetch returns/refunds for the given date range."""
         pass
 
     @abstractmethod
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Return True if the connector can reach its data source."""
         pass
