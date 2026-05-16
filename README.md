@@ -8,10 +8,11 @@ This project is an attempt to fix that. It's a single agent that watches Shopify
 
 ## Demo Video
 
-<video width="100%" controls>
-  <source src="./shiprocket_submission.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+
+
+https://github.com/user-attachments/assets/5f4e8763-3d4f-414b-84a0-574d301249f3
+
+
 
 ***
 
