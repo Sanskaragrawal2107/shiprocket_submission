@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from encryption import decrypt_value, encrypt_value
@@ -213,11 +213,15 @@ def fetch_merchant_rows(
     merchant_id: str,
     date_column: str | None = None,
     from_date: datetime | None = None,
+    to_date: datetime | None = None,
 ) -> list[dict[str, Any]]:
     query = get_supabase().table(table).select("*").eq("merchant_id", merchant_id)
     if date_column and from_date:
         date_value = from_date.date().isoformat() if isinstance(from_date, datetime) else from_date.isoformat()
         query = query.gte(date_column, date_value)
+    if date_column and to_date:
+        end_date = to_date.date() if isinstance(to_date, datetime) else to_date
+        query = query.lt(date_column, (end_date + timedelta(days=1)).isoformat())
     response = query.execute()
     return _rows(response)
 

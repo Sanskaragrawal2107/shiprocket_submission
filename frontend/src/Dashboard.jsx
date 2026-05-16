@@ -24,6 +24,7 @@ import { useAuth } from "./AuthContext";
 import OnboardingModal from "./components/OnboardingModal";
 import { tamboComponents } from "./tamboComponents";
 import { tamboTools } from "./tamboTools";
+import { formatAppDateTime } from "./time";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const TAMBO_API_KEY = import.meta.env.VITE_TAMBO_API_KEY || "";
@@ -140,12 +141,7 @@ function AnomalyCard({ insight, onResolve }) {
       <div className="anomaly-card-footer">
         {insight.created_at && (
           <span className="anomaly-time">
-            {new Date(insight.created_at).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatAppDateTime(insight.created_at)}
           </span>
         )}
         <button className="anomaly-resolve-btn" onClick={handle}>
@@ -207,12 +203,7 @@ function NotificationBell({ notifications, unreadCount, onMarkRead, onMarkAll })
                   <div className="notif-item-title">{n.title}</div>
                   <div className="notif-item-msg">{n.message}</div>
                   <div className="notif-item-time">
-                    {new Date(n.created_at).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatAppDateTime(n.created_at)}
                   </div>
                 </div>
               ))
@@ -245,12 +236,7 @@ function SyncBar({ lastSyncedAt, merchantId, authFetch, onSynced }) {
   };
 
   const lastSyncStr = lastSyncedAt
-    ? new Date(lastSyncedAt).toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatAppDateTime(lastSyncedAt)
     : "Never synced";
 
   return (
@@ -318,12 +304,7 @@ function ThreadHistorySidebar({ onClose, merchantId }) {
                 {thread.name || "Untitled conversation"}
               </span>
               <span className="chat-history-item-date">
-                {new Date(thread.updatedAt ?? thread.createdAt).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {formatAppDateTime(thread.updatedAt ?? thread.createdAt)}
               </span>
             </button>
           ))

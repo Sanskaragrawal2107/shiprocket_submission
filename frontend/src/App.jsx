@@ -12,6 +12,7 @@ import {
 import { tamboComponents } from "./tamboComponents";
 import { tamboTools } from "./tamboTools";
 import { useAuth } from "./AuthContext";
+import { formatAppDate } from "./time";
 
 const TAMBO_API_KEY = import.meta.env.VITE_TAMBO_API_KEY || "";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -27,7 +28,7 @@ function formatThreadMeta(thread) {
   const parsed = rawDate ? new Date(rawDate) : new Date(0);
   if (Number.isNaN(parsed.getTime())) return "Recent";
 
-  return parsed.toLocaleDateString([], { month: "short", day: "numeric" });
+  return formatAppDate(parsed, { month: "short", day: "numeric" });
 }
 
 function getVisibleMessages(messages) {

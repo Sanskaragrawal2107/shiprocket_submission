@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CitationsPanel } from "./CitationsPanel";
+import { formatAppDate } from "../time";
 
 const CitationObjectSchema = z.object({
   source: z.string().describe("Data source: shopify, razorpay, shiprocket, meta_ads, agent_analysis"),
@@ -79,7 +80,7 @@ export function InsightsList({ insights, citations }) {
                   {insight.type || ""}
                 </span>
                 {insight.metric_value && <span>Metric: {insight.metric_value}</span>}
-                {insight.created_at && <span>{new Date(insight.created_at).toLocaleDateString()}</span>}
+                {insight.created_at && <span>{formatAppDate(insight.created_at)}</span>}
               </div>
             </div>
           );

@@ -12,6 +12,7 @@ import os
 import sys
 import json
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -47,6 +48,42 @@ def make_citation(row: dict, field: str) -> dict:
     }
 
 
+def next_day(date_value: str) -> str:
+    """Return the exclusive upper bound for an inclusive YYYY-MM-DD date."""
+    return (date.fromisoformat(date_value[:10]) + timedelta(days=1)).isoformat()
+
+
+@mcp.tool()
+def get_today_date(timezone: str = "Asia/Kolkata") -> dict:
+    """Return today's date and common reporting windows for date-aware MCP calls."""
+    try:
+        tz = ZoneInfo(timezone)
+    except ZoneInfoNotFoundError:
+        timezone = "Asia/Kolkata"
+        tz = ZoneInfo(timezone)
+
+    today = datetime.now(tz).date()
+    last_7_days_start = today - timedelta(days=7)
+    last_30_days_start = today - timedelta(days=30)
+
+    return {
+        "data": {
+            "today": today.isoformat(),
+            "timezone": timezone,
+            "last_7_days": {
+                "from_date": last_7_days_start.isoformat(),
+                "to_date": today.isoformat(),
+            },
+            "last_30_days": {
+                "from_date": last_30_days_start.isoformat(),
+                "to_date": today.isoformat(),
+            },
+        },
+        "citations": [],
+        "summary": f"Today is {today.isoformat()} in {timezone}.",
+    }
+
+
 # ─── Tool 1: Get Orders ───────────────────────────────────
 
 
@@ -56,7 +93,7 @@ def get_orders(merchant_id: str, from_date: str, to_date: str) -> dict:
     supabase = get_supabase()
     result = supabase.table("orders").select("*").eq(
         "merchant_id", merchant_id
-    ).gte("order_date", from_date).lte("order_date", to_date).execute()
+    ).gte("order_date", from_date).lt("order_date", next_day(to_date)).execute()
 
     orders = result.data or []
     citations = []
@@ -98,7 +135,7 @@ def get_revenue_summary(merchant_id: str, from_date: str, to_date: str) -> dict:
     supabase = get_supabase()
     result = supabase.table("orders").select("*").eq(
         "merchant_id", merchant_id
-    ).gte("order_date", from_date).lte("order_date", to_date).execute()
+    ).gte("order_date", from_date).lt("order_date", next_day(to_date)).execute()
 
     orders = result.data or []
     citations = []
@@ -143,7 +180,7 @@ def get_delivery_stats(merchant_id: str, from_date: str, to_date: str) -> dict:
     supabase = get_supabase()
     result = supabase.table("deliveries").select("*").eq(
         "merchant_id", merchant_id
-    ).gte("dispatch_date", from_date).lte("dispatch_date", to_date).execute()
+    ).gte("dispatch_date", from_date).lt("dispatch_date", next_day(to_date)).execute()
 
     deliveries = result.data or []
     citations = []
@@ -356,11 +393,11 @@ def get_ads_performance(merchant_id: str, from_date: str, to_date: str) -> dict:
     supabase = get_supabase()
     ads_result = supabase.table("meta_ads").select("*").eq(
         "merchant_id", merchant_id
-    ).gte("date", from_date).lte("date", to_date).execute()
+    ).gte("date", from_date).lt("date", next_day(to_date)).execute()
 
     orders_result = supabase.table("orders").select("*").eq(
         "merchant_id", merchant_id
-    ).gte("order_date", from_date).lte("order_date", to_date).execute()
+    ).gte("order_date", from_date).lt("order_date", next_day(to_date)).execute()
 
     ads = ads_result.data or []
     orders = orders_result.data or []

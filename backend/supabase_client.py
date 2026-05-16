@@ -59,6 +59,10 @@ class TableQuery:
         self._filters.append(f"{col}=lte.{val}")
         return self
 
+    def lt(self, col: str, val: Any) -> "TableQuery":
+        self._filters.append(f"{col}=lt.{val}")
+        return self
+
     def order(self, col: str, desc: bool = False) -> "TableQuery":
         self._order_col = col
         self._order_desc = desc

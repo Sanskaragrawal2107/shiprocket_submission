@@ -159,10 +159,10 @@ def build_profitability_snapshot(
     window_end = to_date or datetime.now(timezone.utc)
     window_start = from_date or (window_end - timedelta(days=7))
 
-    orders = fetch_merchant_rows("orders", merchant_id, "order_date", window_start)
-    deliveries = fetch_merchant_rows("deliveries", merchant_id, "dispatch_date", window_start)
-    payments = fetch_merchant_rows("payments", merchant_id, "payment_date", window_start)
-    meta_ads = fetch_merchant_rows("meta_ads", merchant_id, "date", window_start)
+    orders = fetch_merchant_rows("orders", merchant_id, "order_date", window_start, window_end)
+    deliveries = fetch_merchant_rows("deliveries", merchant_id, "dispatch_date", window_start, window_end)
+    payments = fetch_merchant_rows("payments", merchant_id, "payment_date", window_start, window_end)
+    meta_ads = fetch_merchant_rows("meta_ads", merchant_id, "date", window_start, window_end)
 
     total_orders = len(orders)
     total_deliveries = len(deliveries)
