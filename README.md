@@ -6,6 +6,12 @@ This project is an attempt to fix that. It's a single agent that watches Shopify
 
 ***
 
+## Demo Video
+
+📹 **[Watch the Full Demo](./shiprocket_submission.mp4)** - See the agent in action as it monitors D2C metrics, identifies profitability leaks, and surfaces actionable recommendations in real-time.
+
+***
+
 ## 1. Architecture & Design
 
 I wanted something robust enough to handle the core D2C data loop but lightweight enough to run autonomously without blowing up LLM costs.
