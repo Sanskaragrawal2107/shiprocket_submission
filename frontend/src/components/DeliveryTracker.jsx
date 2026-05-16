@@ -62,29 +62,43 @@ export function DeliveryTracker({ delivered, in_transit, rto, failed, rto_rate, 
       </div>
       <div className="data-card-body" style={{ padding: 18 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <div className="chart-container" style={{ width: 132, height: 132, flex: "0 0 auto" }}>
+          <div style={{ 
+            width: 180, 
+            height: 180, 
+            flex: "0 0 auto", 
+            position: "relative",
+            border: "4px solid #000000",
+            borderRadius: 0,
+            background: "#ffffff",
+            boxShadow: "4px 4px 0px 0px rgba(0,0,0,1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={34}
-                  outerRadius={58}
-                  paddingAngle={3}
+                  innerRadius={45}
+                  outerRadius={75}
+                  paddingAngle={1}
                   dataKey="value"
                   stroke="none"
                 >
                   {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} fillOpacity={0.9} />
+                    <Cell key={i} fill={entry.color} fillOpacity={1} />
                   ))}
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: "#1e1e2e",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
+                    background: "#ffffff",
+                    border: "4px solid #000000",
+                    borderRadius: 0,
                     fontSize: 12,
+                    padding: 8,
+                    fontWeight: 700,
                   }}
                 />
               </PieChart>

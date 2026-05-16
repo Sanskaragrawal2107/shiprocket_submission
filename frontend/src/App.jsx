@@ -458,7 +458,7 @@ CRITICAL RULES:
 15. Analysis/agent request -> call runAgent with merchant_id="${merchantId}".
 16. Populate components with realistic data if live data is unavailable.
 17. Be concise: one short sentence max before rendering the component.
-18. Every cited number must reference its source table and row ID in the citations array.`,
+18. MANDATORY: Every component render MUST include a citations array. Each citation must have: source (shopify|razorpay|shiprocket|meta_ads), ref (table#row_id format), field (metric name), value (the data). Example: [{source:"shopify", ref:"orders#order_123", field:"total_orders", value:45}]. If you don't know the exact row IDs, use a generic table reference like "shopify#unified" or "db#snapshot".`,
     }),
     merchantContext: () => ({
       key: "merchantContext",
