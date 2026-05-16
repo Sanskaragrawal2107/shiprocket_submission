@@ -8,7 +8,10 @@ This project is an attempt to fix that. It's a single agent that watches Shopify
 
 ## Demo Video
 
-📹 **[Watch the Full Demo](./shiprocket_submission.mp4)** - See the agent in action as it monitors D2C metrics, identifies profitability leaks, and surfaces actionable recommendations in real-time.
+<video width="100%" controls>
+  <source src="./shiprocket_submission.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ***
 
