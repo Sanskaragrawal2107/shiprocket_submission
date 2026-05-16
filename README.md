@@ -185,7 +185,7 @@ Right now the sync runs sequentially and upserts in batches of 50, scheduled via
 - **Day 5-6:** Merchant onboarding flow, threshold sync into agent engine, profitability analysis, frontend polish, Netlify deployment, and final README.
 
 **A Note on AI Tools:**
-I used Claude heavily for boilerplate — FastAPI route signatures, Pydantic schemas, React components, Supabase SQL policies. It's fast at that stuff.
+I used copilot heavily for boilerplate — FastAPI route signatures, Pydantic schemas, React components, Supabase SQL policies. It's fast at that stuff.
 
 The architecture decisions were mine: the `source_row_ref` citation design, the two-phase agent logic, the anti-hallucination validation, the connector normalization patterns. That's where the actual thinking happened.
 
