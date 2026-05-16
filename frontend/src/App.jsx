@@ -414,7 +414,8 @@ export default function App() {
       .then((data) => {
         const rows = Array.isArray(data?.insights) ? data.insights : [];
         const latest = rows.find((row) => row.data_snapshot);
-        if (latest?.data_snapshot) setKpis(latest.data_snapshot);
+        const snapshot = latest?.data_snapshot?.metrics_checked || latest?.data_snapshot || null;
+        if (snapshot) setKpis(snapshot);
       })
       .catch(console.error);
   }, [authFetch, merchantId]);
@@ -452,11 +453,12 @@ CRITICAL RULES:
 10. Health/overview/dashboard query -> render HealthScore immediately.
 11. Sync request -> call syncMerchant with merchant_id="${merchantId}", then confirm.
 12. Least profitable product / product margin / root cause -> call getProfitability with merchant_id="${merchantId}" and render a single ProfitabilityCard.
-13. For broad mixed questions about orders, ads, payments, and deliveries, keep the response clean: prefer one profitability answer over multiple charts unless the user explicitly asks for separate breakdowns.
-14. Analysis/agent request -> call runAgent with merchant_id="${merchantId}".
-15. Populate components with realistic data if live data is unavailable.
-16. Be concise: one short sentence max before rendering the component.
-17. Every cited number must reference its source table and row ID in the citations array.`,
+13. Full business audit / comprehensive health check / all dashboards -> first give your analysis text, then render ALL these components as separate blocks in this order: RevenueCard, OrdersChart, AdsDashboard, PaymentLedger, DeliveryTracker, CrossChannelChart, HealthScore, InsightsList, ProfitabilityCard.
+14. For broad mixed questions about orders, ads, payments, and deliveries, keep the response clean: prefer one profitability answer over multiple charts unless the user explicitly asks for separate breakdowns.
+15. Analysis/agent request -> call runAgent with merchant_id="${merchantId}".
+16. Populate components with realistic data if live data is unavailable.
+17. Be concise: one short sentence max before rendering the component.
+18. Every cited number must reference its source table and row ID in the citations array.`,
     }),
     merchantContext: () => ({
       key: "merchantContext",

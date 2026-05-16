@@ -530,10 +530,10 @@ function DashboardInner() {
       const rows = Array.isArray(data?.insights) ? data.insights : [];
       setInsights(rows);
 
-      // DB field is data_snapshot (not metrics_checked)
       const latest = rows.find((r) => r.data_snapshot);
-      if (latest?.data_snapshot) {
-        setKpis(latest.data_snapshot);
+      const snapshot = latest?.data_snapshot?.metrics_checked || latest?.data_snapshot || null;
+      if (snapshot) {
+        setKpis(snapshot);
       }
     } catch (err) {
       console.error("Insights fetch failed:", err);
@@ -640,14 +640,12 @@ function DashboardInner() {
     }
   };
 
-  /* KPI display helpers — data_snapshot field names from the actual DB */
+  /* KPI display helpers — normalized from agent_insights.data_snapshot.metrics_checked */
   const totalOrders = kpis?.total_orders ?? null;
   const revenue = kpis?.total_revenue ?? null;
-  const rtoRate = kpis?.delivery_failure_rate != null
-    ? kpis.delivery_failure_rate * 100   // stored as 0–1 fraction
-    : null;
-  const roas = kpis?.overall_roas ?? null;
-  const settlementGap = null; // not yet in data_snapshot
+  const rtoRate = kpis?.rto_rate ?? null;
+  const roas = kpis?.roas ?? null;
+  const settlementGap = kpis?.settlement_gap_percent ?? null;
   const adSpend = kpis?.total_ad_spend ?? null;
 
   /**
